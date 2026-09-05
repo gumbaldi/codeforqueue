@@ -10,6 +10,7 @@ set -eu
 command -v jq >/dev/null 2>&1 || { echo "cfq-dash.sh: jq is required" >&2; exit 1; }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cfq="$script_dir/../bin/cfq"
 mode="json"
 if [ "${1:-}" = "render" ]; then
   mode="render"
@@ -17,7 +18,7 @@ if [ "${1:-}" = "render" ]; then
 fi
 cwd="${1:-$(pwd)}"
 
-runtime_json=$("$script_dir/cfq-runtime.sh" plugins)
+runtime_json=$("$cfq" runtime plugins)
 if [ "$(jq -r '.status' <<<"$runtime_json")" != "OK" ]; then
   if [ "$mode" = "render" ]; then
     printf 'PRECHECKS\n'
@@ -35,13 +36,13 @@ pony_mode=$(jq -r '.ponytailMode' <<<"$runtime_json")
 repo=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || true)
 repo_args=(); [ -n "$repo" ] && repo_args=(--repo "$repo")
 
-settings_src=$("$script_dir/cfq-settings.sh" list "${repo_args[@]}" --sources)
+settings_src=$("$cfq" settings list "${repo_args[@]}" --sources)
 
 # One env-stripped re-read of the same tiers, only when at least one key is actually
 # env-overridden — gives every masked file value in one call, never one per key.
 masked_src="{}"
 if [ "$(jq '[.[] | select(.source | startswith("env"))] | length' <<<"$settings_src")" -gt 0 ]; then
-  masked_src=$(env -i HOME="$HOME" PATH="$PATH" "$script_dir/cfq-settings.sh" list "${repo_args[@]}" --sources)
+  masked_src=$(env -i HOME="$HOME" PATH="$PATH" "$cfq" settings list "${repo_args[@]}" --sources)
 fi
 
 settings_json=$(jq -c --argjson masked "$masked_src" '
@@ -63,7 +64,7 @@ plugins_obj=$(jq -n --argjson mp "$has_mp" --argjson pt "$has_pt" --argjson g "$
   --arg pm "$pony_mode" \
   '{mattpocock: $mp, ponytail: $pt, useMattpocockGrilling: $g, usePonytailAudit: $p, ponytailMode: $pm}')
 
-scan_json=$("$script_dir/cfq-scan.sh")
+scan_json=$("$cfq" scan)
 
 # Repo-level rollup: batch counts (open = not yet archived, done = moved to impl/done/) plus the
 # most severe status among the repo's batches — aggregated from counters the scan already

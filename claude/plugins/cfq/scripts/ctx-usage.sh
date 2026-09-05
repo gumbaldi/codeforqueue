@@ -27,20 +27,21 @@
 #                                  # existing consumer, no longer affects the decision
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cfq="$script_dir/../bin/cfq"
 
-stop_used=$("$script_dir/cfq-settings.sh" get stopUsed 2>/dev/null || echo 100000)
+stop_used=$("$cfq" settings get stopUsed 2>/dev/null || echo 100000)
 case "$stop_used" in
   -1) ;;
   ''|*[!0-9]*) stop_used=100000 ;;
 esac
 
-stop_5h=$("$script_dir/cfq-settings.sh" get stopFiveHourPct 2>/dev/null || echo 70)
+stop_5h=$("$cfq" settings get stopFiveHourPct 2>/dev/null || echo 70)
 case "$stop_5h" in
   -1) ;;
   ''|*[!0-9]*) stop_5h=70 ;;
 esac
 
-stop_7d=$("$script_dir/cfq-settings.sh" get stopSevenDayPct 2>/dev/null || echo 95)
+stop_7d=$("$cfq" settings get stopSevenDayPct 2>/dev/null || echo 95)
 case "$stop_7d" in
   -1) ;;
   ''|*[!0-9]*) stop_7d=95 ;;
@@ -61,7 +62,7 @@ if [ "$stop_used" = "-1" ] && [ "$stop_5h" = "-1" ] && [ "$stop_7d" = "-1" ]; th
   exit 0
 fi
 
-ctx=$("$script_dir/cfq-runtime.sh" context)
+ctx=$("$cfq" runtime context)
 used=$(jq -r '.used // empty' <<<"$ctx")
 note=$(jq -r '.note' <<<"$ctx")
 cache_read=$(jq -r '.cache.read // empty' <<<"$ctx")

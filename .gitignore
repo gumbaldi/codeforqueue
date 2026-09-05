@@ -6,3 +6,5 @@
 .claude/cfq/.maintenance
 .claude/cfq/telemetry.jsonl
 *.tmp
+__pycache__/
+*.pyc

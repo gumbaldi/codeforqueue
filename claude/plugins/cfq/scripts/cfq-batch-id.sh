@@ -20,6 +20,7 @@ set -eu
 command -v jq >/dev/null 2>&1 || { echo "cfq-batch-id.sh: jq is required" >&2; exit 1; }
 
 here="$(dirname "${BASH_SOURCE[0]}")"
+cfq="$here/../bin/cfq"
 # shellcheck source=cfq-paths.sh
 . "$here/cfq-paths.sh"
 
@@ -99,7 +100,7 @@ queue_is_empty() {
 
 changelog_path() {
   local repo="$1" rel
-  rel="$("$here/cfq-settings.sh" get changelogFile)"
+  rel="$("$cfq" settings get changelogFile)"
   [ -n "$rel" ] || return 1
   printf '%s/%s\n' "$repo" "$rel"
 }
@@ -111,14 +112,14 @@ changelog_path() {
 compute_next() {
   local repo="$1" date="$2" slug="$3" cf changelog_max qmax widths n_widths width next digits formatted
 
-  cf="$("$here/cfq-settings.sh" get changelogFile)"
+  cf="$("$cfq" settings get changelogFile)"
   if [ -z "$cf" ]; then
     err BATCH_CHANGELOG_REQUIRED "changelogFile is disabled; numbered batch identity needs the CFQ workflow changelog" "set changelogFile before allocating a numbered batch"
     return 1
   fi
 
-  "$here/cfq-changelog.sh" ensure "$repo" >/dev/null
-  changelog_max="$("$here/cfq-changelog.sh" max-batch-number "$repo")"
+  "$cfq" changelog ensure "$repo" >/dev/null
+  changelog_max="$("$cfq" changelog max-batch-number "$repo")"
   qmax="$(queue_max "$repo")"
 
   if [ "$qmax" -gt "$changelog_max" ]; then
@@ -171,7 +172,7 @@ migrate_width() {
   target="$(changelog_path "$repo" 2>/dev/null || true)"
   d="$(impl_done_dir "$repo")"
 
-  changelog_max="$("$here/cfq-changelog.sh" max-batch-number "$repo")"
+  changelog_max="$("$cfq" changelog max-batch-number "$repo")"
   next=$((changelog_max + 1))
   digits=${#next}
   to="$DEFAULT_WIDTH"
@@ -230,7 +231,9 @@ migrate_width() {
     old_n="${pair%%:*}"; new_n="${pair#*:}"
     [ -d "$d/$old_n" ] && mv "$d/$old_n" "$d/$new_n"
     if [ -n "$target" ] && [ -f "$target" ]; then
-      "$here/cfq-changelog.sh" rename-batch "$repo" "$old_n" "$new_n"
+      # Direct sibling call: inside a per-pair loop, where a dispatcher exec per iteration
+      # is the more expensive trade (see CLAUDE.md's dispatcher-loop-exception note).
+      python3 "$here/cfq_changelog.py" rename-batch "$repo" "$old_n" "$new_n"
     fi
   done
 
@@ -329,7 +332,8 @@ reconcile() {
     local reserve_out
     for dp in "${ordered[@]}"; do
       num="${dp%%:*}"; name="${dp#*:}"
-      if ! reserve_out="$("$here/cfq-changelog.sh" reserve "$repo" "$num" "$name" 2>&1)"; then
+      # Direct sibling call: inside a per-orphan loop, see CLAUDE.md's dispatcher-loop-exception note.
+      if ! reserve_out="$(python3 "$here/cfq_changelog.py" reserve "$repo" "$num" "$name" 2>&1)"; then
         err BATCH_ID_CONFLICT "reconcile --fix: reserving $name failed: $reserve_out" "resolve manually, then retry reconcile"
         return 1
       fi
@@ -342,7 +346,7 @@ reconcile() {
     num="${dp%%:*}"
     [ "$num" -gt "$dir_max" ] && dir_max="$num"
   done
-  ledger_max="$("$here/cfq-changelog.sh" max-batch-number "$repo")"
+  ledger_max="$("$cfq" changelog max-batch-number "$repo")"
 
   local -a orphan_dir_names=()
   for dp in "${orphan_dirs[@]}"; do orphan_dir_names+=("${dp#*:}"); done
@@ -409,7 +413,7 @@ case "$cmd" in
     slug="${4:?usage: cfq-batch-id.sh allocate <repo-root> <YYYY-MM-DD> <slug>}"
     validate_args "$date" "$slug"
 
-    "$here/cfq-layout.sh" ensure "$repo" >/dev/null
+    "$cfq" layout ensure "$repo" >/dev/null
 
     if ! acquire_alloc_lock "$repo"; then
       err INTERNAL_ERROR "could not acquire the allocation lock" "retry once the concurrent allocation finishes"
@@ -454,7 +458,7 @@ case "$cmd" in
     # the state left standing on purpose. That's the recoverable half: `cfq batch reconcile`
     # reports a ledger entry with no directory and a later allocate simply moves past it, whereas
     # the reverse (a directory with no entry) is exactly what breaks numbering.
-    if ! reserve_out="$("$here/cfq-changelog.sh" reserve "$repo" "$number" "$batch" 2>&1)"; then
+    if ! reserve_out="$("$cfq" changelog reserve "$repo" "$number" "$batch" 2>&1)"; then
       err BATCH_ID_CONFLICT "changelog reservation for $batch failed: $reserve_out" "retry; the failed number stays consumed and is never reused"
       exit 1
     fi

@@ -20,6 +20,7 @@ command -v jq >/dev/null 2>&1 || {
 }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cfq="$script_dir/../bin/cfq"
 
 # pwd-based slug without --repo (matches ctx-usage.sh/cfq-telemetry.sh); repo-based with --repo
 # (matches cfq-lock.sh, which slugs the repo it is locking, not its own cwd).
@@ -54,7 +55,7 @@ resolve_transcript_path() {
 # matching today's ctx-usage.sh backward-compat env vars.
 ctx_window_limit_for() {
   local model="${1:-}" limits base
-  limits=$("$script_dir/cfq-settings.sh" get ctxWindowLimits 2>/dev/null || echo '{}')
+  limits=$("$cfq" settings get ctxWindowLimits 2>/dev/null || echo '{}')
   if [ "$(jq -r --arg m "$model" '(.large.models // []) | index($m) != null' <<<"$limits" 2>/dev/null)" = "true" ]; then
     base=$(jq -r '.large.limit // 1000000' <<<"$limits")
   else

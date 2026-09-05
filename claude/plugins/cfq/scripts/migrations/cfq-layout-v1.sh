@@ -27,7 +27,7 @@ discover() {
 $current"
 
   local roots root
-  roots=$("$scripts_dir/cfq-settings.sh" get scanRoots 2>/dev/null || true)
+  roots=$(python3 "$scripts_dir/cfq_settings.py" get scanRoots 2>/dev/null || true)
   local old_ifs=$IFS; IFS=','
   for root in $roots; do
     IFS=$old_ifs

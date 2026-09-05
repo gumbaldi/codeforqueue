@@ -540,4 +540,8 @@
       summary: "Migrated the last seven test files (ifq/pfq preflight stubs, scan, telemetry, branch, layout, layout-migration) to unittest and removed the not-yet-migrated block from CLAUDE.md; the cfq test suite is now entirely Python."
 - batchNumber: 14
   batch: 014-2026-09-03-port-core-scripts-to-python
-  status: parked
+  branch: cfq/014-2026-09-03-port-core-scripts-to-python
+  base: cfq/013-2026-09-03-migrate-test-suite-to-python-unittest
+  started: 2026-09-05
+  status: in-progress
+  legacy: false

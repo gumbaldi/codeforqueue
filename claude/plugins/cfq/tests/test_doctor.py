@@ -1,6 +1,6 @@
 """Migrated from test-doctor.sh.
 
-Self-test for scripts/cfq-doctor.sh: the host dependency doctor. Deliberately jq-free itself, so
+Self-test for scripts/cfq_doctor.py: the host dependency doctor. Deliberately jq-free itself, so
 every case that restricts PATH uses an explicit env= per call (never a mutated os.environ) and
 parses JSON output with the stdlib json module rather than requiring jq to be on PATH.
 """
@@ -14,8 +14,8 @@ import unittest
 from cfq_testlib import CfqTestCase, PLUGIN_ROOT
 
 CORE_BINS = [
-    "bash", "git", "timeout", "head", "ls", "date", "stat", "printf", "mkdir", "tr", "pwd",
-    "sed", "grep", "cat", "dirname", "mv", "rm", "find",
+    "bash", "python3", "git", "timeout", "head", "ls", "date", "stat", "printf", "mkdir", "tr",
+    "pwd", "sed", "grep", "cat", "dirname", "mv", "rm", "find",
 ]
 
 
@@ -59,7 +59,7 @@ class TestDoctor(CfqTestCase):
 
     def test_dependency_inventory_matches_required_and_optional(self):
         inventory = (PLUGIN_ROOT / "config" / "dependencies.txt").read_text()
-        for must in ("bash", "git", "jq"):
+        for must in ("bash", "git", "jq", "python3"):
             self.assertRegex(
                 inventory, rf"(?m)^{re.escape(must)}\|required\|",
                 f"dependencies.txt missing required entry for {must}",
@@ -88,6 +88,16 @@ class TestDoctor(CfqTestCase):
         self.run_cfq("doctor", "check", env={"PATH": pm_path})
         self.run_cfq("doctor", "hook", env={"PATH": pm_path})
         self.assertFalse((marker / "invoked.log").exists(), "a package manager was actually invoked")
+
+    def test_missing_python3_reports_named_guard_message(self):
+        nopython_bins = [b for b in CORE_BINS if b != "python3"]
+        nopython_dir = self.minimal_path(*nopython_bins, "jq")
+        proc = self.run_cfq("doctor", "check", env={"PATH": nopython_dir})
+        self.assertEqual(proc.returncode, 127, f"no-python3 exit != 127: {proc.returncode}")
+        self.assertIn(
+            "cfq: python3 is required for 'doctor' but was not found on PATH.", proc.stderr,
+            f"missing named python3-guard message: {proc.stderr}",
+        )
 
     def test_hook_config_uses_plugin_root_variable(self):
         hooks_json = PLUGIN_ROOT / "hooks" / "hooks.json"

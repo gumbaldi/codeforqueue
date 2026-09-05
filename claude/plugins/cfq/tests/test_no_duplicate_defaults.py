@@ -26,7 +26,7 @@ import unittest
 
 from cfq_testlib import SCRIPTS_DIR, CfqTestCase
 
-EXEMPT = {"cfq-settings.sh", "ctx-usage.sh"}
+EXEMPT = {"cfq-settings.sh", "ctx-usage.sh", "cfq_settings.py"}
 
 FALLBACK_LINE = re.compile(r"\|\| echo |:-[^}]*\}")
 SETTINGS_REF = re.compile(r"cfq-settings\.sh|\$settings_sh")
@@ -73,12 +73,16 @@ def extract_literal(content):
     return literal
 
 
-def check_dir(directory, reprs, exempt=()):
-    """Scans every *.sh directly under `directory` (non-recursive) except `exempt` for a
-    settings-read fallback literal that duplicates a schema default. Returns the list of FAIL
-    lines."""
+def check_dir(directory, reprs, exempt=(), globs=("*.sh",)):
+    """Scans every file matching `globs` directly under `directory` (non-recursive) except
+    `exempt` for a settings-read fallback literal that duplicates a schema default. Returns the
+    list of FAIL lines. `*.py` joins the scan once settings has a Python implementation (batch
+    014 phase 02) -- the `*.sh`-only default stays so a repo with no `.py` files still passes."""
     fails = []
-    for f in sorted(directory.glob("*.sh")):
+    files = []
+    for pattern in globs:
+        files.extend(directory.glob(pattern))
+    for f in sorted(files):
         if f.name in exempt:
             continue
         for lineno, line in enumerate(f.read_text().splitlines(), start=1):
@@ -102,7 +106,7 @@ class NoDuplicateDefaultsTest(CfqTestCase):
         schema = self.json_out(self.run_cfq("settings", "describe", home=self.home))
         reprs = default_reprs(schema)
 
-        fails = check_dir(SCRIPTS_DIR, reprs, EXEMPT)
+        fails = check_dir(SCRIPTS_DIR, reprs, EXEMPT, globs=("*.sh", "*.py"))
         self.assertEqual(fails, [], msg="\n".join(fails))
 
     def test_selfcheck_catches_bug_shape_and_ignores_unrelated_fallback(self):

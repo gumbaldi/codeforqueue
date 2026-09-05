@@ -21,7 +21,7 @@ class DispatcherTest(CfqTestCase):
             capture_output=True, text=True,
         )
         b = subprocess.run(
-            ["bash", str(SCRIPTS_DIR / "cfq-settings.sh"), "list", "--repo", str(repo1)],
+            ["python3", str(SCRIPTS_DIR / "cfq_settings.py"), "list", "--repo", str(repo1)],
             capture_output=True, text=True,
         )
         self.assertEqual(a.stdout, b.stdout, msg="settings list differs between dispatcher and direct call")
@@ -37,7 +37,7 @@ class DispatcherTest(CfqTestCase):
         home2.mkdir()
         doctor_env = {"HOME": str(home2)}
         a = self.run_clean(str(CFQ_BIN), "doctor", "check", env=doctor_env)
-        b = self.run_clean("bash", str(SCRIPTS_DIR / "cfq-doctor.sh"), "check", env=doctor_env)
+        b = self.run_clean("python3", str(SCRIPTS_DIR / "cfq_doctor.py"), "check", env=doctor_env)
         self.assertEqual(a.stdout, b.stdout, msg="doctor check differs between dispatcher and direct call")
 
     def test_02_argument_passthrough(self):
@@ -90,14 +90,20 @@ class DispatcherTest(CfqTestCase):
 
     def test_07_completeness_every_script_reachable(self):
         # Extracted straight from bin/cfq's own table, not retyped here, so this stays a
-        # structural check rather than a copy that can silently drift from the real map.
+        # structural check rather than a copy that can silently drift from the real map. Scripts
+        # may be shell or Python (batch 014); scripts/cfq_lib/ is a package, not a command, and
+        # a non-recursive glob already excludes it without needing to say so.
         text = CFQ_BIN.read_text()
-        pattern = re.compile(r"^\s*\[[a-z-]+\]=(cfq-[a-z-]+\.sh|ctx-usage\.sh)$", re.MULTILINE)
+        pattern = re.compile(r"^\s*\[[a-z-]+\]=(cfq[a-z_-]+\.(?:sh|py)|ctx-usage\.sh)$", re.MULTILINE)
         mapped = sorted({m.group(1) for m in pattern.finditer(text)})
-        on_disk = sorted(f.name for f in SCRIPTS_DIR.glob("*.sh") if f.name != "cfq-paths.sh")
+        on_disk = sorted(
+            f.name
+            for f in list(SCRIPTS_DIR.glob("*.sh")) + list(SCRIPTS_DIR.glob("*.py"))
+            if f.name != "cfq-paths.sh"
+        )
         self.assertEqual(
             mapped, on_disk,
-            msg="dispatcher routing table and scripts/*.sh (minus cfq-paths.sh) disagree",
+            msg="dispatcher routing table and scripts/*.sh + scripts/*.py (minus cfq-paths.sh) disagree",
         )
 
         # Exactly one noun per script (no script mapped twice).

@@ -1,6 +1,6 @@
 """Migrated from test-changelog.sh.
 
-Self-test for scripts/cfq-changelog.sh -- the YAML changelog itself: init/finish lifecycle,
+Self-test for scripts/cfq_changelog.py -- the YAML changelog itself: init/finish lifecycle,
 numbered-batch reserve, Git-trailer bootstrap, legacy migration, commit-message trailers,
 branch-for lookup and the gitStatePolicy exclusion.
 """

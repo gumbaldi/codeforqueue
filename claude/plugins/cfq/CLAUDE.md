@@ -4,10 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Claude Code plugin, not an application: four skills (`skills/*/SKILL.md`), twenty-one bash scripts
-(`scripts/`) plus one isolated migration utility (`scripts/migrations/`), eight TOML command aliases
-(`commands/`). No build step, no package manager, no runtime other than `bash` and `jq` (every script
-hard-fails without jq except `cfq-doctor.sh` itself, which is jq-free on purpose — see Architecture).
+A Claude Code plugin, not an application: four skills (`skills/*/SKILL.md`) whose implementations
+live under `scripts/` — four of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
+`cfq_doctor.py`) ported to stdlib Python as batch `014`, the 22 genuinely-shell-shaped scripts stay
+shell; `bin/cfq` decides which interpreter to run by file extension, see Commands — plus one
+isolated migration utility (`scripts/migrations/`), eight TOML command aliases (`commands/`). No
+build step, no package manager; every shell script hard-fails without `jq` except `cfq_doctor.py`
+itself, which is jq-free on purpose — see Architecture.
 
 Reference files hold what would otherwise blow the 200-line budget of a `SKILL.md` (see
 Conventions): all of them live flat under `references/` (e.g. `doc-style.md`,
@@ -39,9 +42,33 @@ claude/plugins/cfq/bin/cfq ctx        # read-only, safe as-is; must print PCT=<n
 **`bin/cfq <noun> <verb>` is the entrypoint.** Skills call it as
 `"${CLAUDE_PLUGIN_ROOT}/bin/cfq" <noun> <verb>` — that variable only exists in an installed-plugin
 session, so use a relative path (`claude/plugins/cfq/bin/cfq ...`) when testing from a checkout. The
-21 scripts under `scripts/` are implementations, still directly executable (the test suite calls
-them that way on purpose — see Architecture) but no longer the documented interface; add a new
-script's noun to `bin/cfq`'s routing table, not a new call site naming the script.
+scripts under `scripts/` are implementations, still directly runnable (`bash <script>.sh` or
+`python3 <script>.py` — the test suite calls them that way on purpose, see Architecture) but no
+longer the documented interface; add a new script's noun to `bin/cfq`'s routing table, not a new
+call site naming the script. `bin/cfq` itself picks the interpreter by extension (`*.py` →
+`python3`, guarded by a `require_python` check that exits 127 with a named message; anything else
+→ direct exec) — implementations may be reimplemented in either language without any caller
+noticing, which is the point.
+
+Scripts call each other through `bin/cfq <noun>`, never by filename — the same rule that applies
+to skills and references. `scripts/cfq-paths.sh` is the single sourced exception: it is sourced,
+not executed, and has no noun. `scripts/cfq_lib/` is a different kind of exception — shared Python
+with no CLI and no noun of its own, imported by `cfq_*.py` implementations the way `cfq-paths.sh`
+is sourced by shell ones (`cfq_lib/paths.py` deliberately duplicates `cfq-paths.sh` under a
+consistency test, `tests/test_layout.py`, until the last shell script sourcing it is ported — see
+Architecture). Two further exceptions stay direct filename calls, each commented at its call site:
+- **Inner-loop calls** (`cfq-batch-id.sh`'s per-pair rename and per-orphan reserve,
+  `cfq-scan.sh`'s per-repo registry-add and per-repo settings-get): a dispatcher exec resolves
+  `../bin/cfq` fresh on every iteration, so the direct sibling call is the cheaper trade there.
+- **`cfq_report.py`'s internal call to `cfq-scan.sh`** (used by the `index` verb): `bin/cfq`
+  resolves its `NOUN_SCRIPT` table relative to its own real location, so routing this call through
+  the dispatcher would always reach the real, unstubbed `cfq-scan.sh` — breaking the test double
+  `tests/test_report.py` shadows it with. Stays a direct `SCRIPT_DIR` call for that reason.
+
+Any test double that copies `scripts/` to intercept a sibling call by filename (e.g.
+`tests/test_ifq_preflight.py`, `tests/test_pfq_preflight.py`) must copy `bin/` alongside it,
+preserving the real `bin/../scripts` layout — `bin/cfq` resolves its routing table relative to its
+own location, so the copy only routes to the shadowed sibling if both directories move together.
 
 ## Architecture
 
@@ -84,12 +111,12 @@ key on these paths — see **Hook contract** in `README.md` before renaming anyt
 **Three state files, all outside any repo**, in `$HOME/.claude/code-for-queue/` (the global store's
 own path — unrelated to and not renamed by the repo-local `.claude/cfq/` layout above): `repos.json`
 (registry of repos that ever had a queue, written by `cfq-registry.sh add` from both worker skills),
-`settings.json` (the global settings tier, `cfq-settings.sh`), and `state.json` (schema-less runtime
-state such as `setupDone`, `cfq-settings.sh state get/set`). `cfq-scan.sh` unions the registry with a
+`settings.json` (the global settings tier, `cfq_settings.py`), and `state.json` (schema-less runtime
+state such as `setupDone`, `cfq_settings.py state get/set`). `cfq-scan.sh` unions the registry with a
 `find` over `scanRoots`, so a repo is discovered even if it was never registered.
 
 **Settings precedence is env > repo `.claude/cfq/settings.json` > global `settings.json` >
-default**, one schema in `cfq-settings.sh` driving every tier generically: `merged_tiers()` layers
+default**, one schema in `cfq_settings.py` driving every tier generically: `merged_tiers()` layers
 global-then-repo file overlays onto the schema `defaults`, `with_overrides()` then applies `CFQ_*`
 env vars on top on read only — a `set` on an env-overridden key writes the file but stays invisible
 until the variable is gone. Adding a setting means adding **one schema entry** — type, default,
@@ -98,7 +125,7 @@ scope (`global` and/or `repo`), optional `env` mapping, description — every su
 there is no second hand-written case arm or table to keep in sync. `migrate <repo-root>` copies
 whatever the legacy per-repo `env` block (`<repo>/.claude/settings.json`) currently overrides into
 the new repo-scoped file, so that mechanism doesn't have to live forever. `stopUsed`
-is resolved by `ctx-usage.sh` through `cfq-settings.sh get stopUsed`, same precedence chain as
+is resolved by `ctx-usage.sh` through `bin/cfq settings get stopUsed`, same precedence chain as
 any other setting — anyone reworking that script breaks the precedence chain at exactly that
 point. The gate reports three verdicts and five reasons: capacity (`stopUsed`) always blocks
 (`HANDOFF`/`STOP`); a rate limit (`stopFiveHourPct`/`stopSevenDayPct`) or an unresolvable context
@@ -109,7 +136,7 @@ window must never be downgraded to a warning just because a rate-limit reason ha
 evaluated first; the `stopUsed: 0` bypass suppresses only the capacity reason, never the
 rate-limit `WARN`. `setupDone` is the
 one exception that lives outside this schema entirely — it's runtime state, not policy, and goes
-through `cfq-settings.sh state get/set` against a separate schema-less store instead.
+through `cfq_settings.py state get/set` against a separate schema-less store instead.
 
 **`cfq-runtime.sh` is the one Claude-Code-specific adapter.** Session id, transcript path, model
 name and context usage each used to be resolved independently in `ctx-usage.sh`, `cfq-lock.sh` and
@@ -124,11 +151,13 @@ Claude Code runtime/statusline/plugin-cache representation change should only ev
 `cfq-runtime.sh` (+ its tests/fixtures). If a change to any other aggregator is ever needed for
 such a change, that is itself a regression to fix, not an accepted cost.
 
-**`cfq-doctor.sh` is the host dependency doctor**, deliberately jq-free (it's the one check every
+**`cfq_doctor.py` is the host dependency doctor**, deliberately jq-free (it's the one check every
 other script cannot perform on its own behalf) and reading a plain-text inventory
-(`config/dependencies.txt`: required / alternative / optional). The bundled `SessionStart` hook
-(`cfq-doctor.sh hook`) is silent on a healthy host and warns both user and Claude only when a
-required command is missing — it never installs anything itself.
+(`config/dependencies.txt`: required / alternative / optional) — a missing `python3` itself is
+caught one layer down, by `bin/cfq`'s own `require_python` guard, since the doctor cannot report an
+interpreter it needs to run. The bundled `SessionStart` hook (`bin/cfq doctor hook`) is silent on a
+healthy host and warns both user and Claude only when a required command is missing — it never
+installs anything itself.
 
 **Telemetry is metadata only.** `cfq-telemetry.sh` derives everything from the running session's own
 transcript (`cfq-runtime.sh`'s path resolution, reused rather than reinvented) — never from a model's
@@ -200,7 +229,7 @@ execution should re-run that comparison first, not take this paragraph on faith.
 ## Status Vocabulary
 
 Every read-only aggregator (`cfq-pfq-preflight.sh`, `cfq-ifq-preflight.sh`, `cfq-scan.sh
---format=`, `cfq-report.sh index/detail`, `cfq-runtime.sh plugins`, and any future one) reports a
+--format=`, `cfq_report.py index/detail`, `cfq-runtime.sh plugins`, and any future one) reports a
 `status` field skills react to structurally, never by parsing prose. `status` is always exactly one
 of:
 
@@ -235,7 +264,10 @@ use `.git/info/exclude` instead, per `gitStatePolicy`). The queue lives in the *
 is not part of the plugin, it's this monorepo's own self-hosting state. `/ifq` sessions therefore run
 against the repo root and, per the skill (and like every other repo since `branchPerBatch`), branch
 to `cfq/<batch-directory-name>` per batch and record progress in `.claude/cfq/changelog.yml`
-(`cfq-changelog.sh`) rather than committing to `main` directly. Batches parked before the
+(`cfq_changelog.py`) rather than committing to `main` directly. Batches parked before the
 numbered-identity refactor keep their legacy `vX.Y-<slug>` branch and `<YYYY-MM-DD>-<slug>` directory
 name until they finish; only batches parked after cutover get a numbered
-`<NNN>-<YYYY-MM-DD>-<slug>` identity and `cfq/`-prefixed branch.
+`<NNN>-<YYYY-MM-DD>-<slug>` identity and `cfq/`-prefixed branch. `changelog.yml` itself is parsed
+and written line-wise on purpose, never through a YAML library, so comments, field order and
+layout survive a write untouched outside the lines actually changing; adding a YAML library here
+would be a regression, not an upgrade.

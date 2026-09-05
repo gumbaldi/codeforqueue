@@ -18,9 +18,12 @@ class IfqPreflightTest(CfqTestCase):
         # Copies the whole scripts/ dir so cfq-ifq-preflight.sh's own script_dir resolution
         # (and every sibling script it shells out to, e.g. cfq-resume.sh -> cfq-branch.sh)
         # resolves inside the copy, then swaps cfq-branch.sh for a wrapper that logs every
-        # invocation before delegating to the real binary.
+        # invocation before delegating to the real binary. bin/ is copied alongside scripts/
+        # (same relative layout as the real plugin) because internal sibling calls now route
+        # through bin/cfq, which resolves its own NOUN_SCRIPT table relative to itself.
         self.scripts_copy = self._repos_dir / "scripts"
         shutil.copytree(PLUGIN_ROOT / "scripts", self.scripts_copy)
+        shutil.copytree(PLUGIN_ROOT / "bin", self._repos_dir / "bin")
         real = self.scripts_copy / "cfq-branch-real.sh"
         (self.scripts_copy / "cfq-branch.sh").rename(real)
         self.count_log = self._repos_dir / "branch-calls.log"
@@ -209,7 +212,7 @@ exec "$d/cfq-branch-real.sh" "$@"
         self.assertFalse(out["nextPhase"]["failedAttempt"]["found"], msg=f"no red entry yet: {out}")
 
         self.run_clean(
-            "bash", str(self.scripts_copy / "cfq-report.sh"), "append", str(batch),
+            "python3", str(self.scripts_copy / "cfq_report.py"), "append", str(batch),
             '{"phase":"01-a","status":"red","finished":"2026-01-01T00:00:00+00:00","summary":"boom",'
             '"deviations":[],"errors":["x"],"verification":"x","commit":""}',
             env={"HOME": str(self.home)},
@@ -222,7 +225,7 @@ exec "$d/cfq-branch-real.sh" "$@"
         fresh_batch = repo8.parent / "fresh-no-report" / "2026-01-01-solo"
         fresh_batch.mkdir(parents=True)
         proc = self.run_clean(
-            "bash", str(self.scripts_copy / "cfq-report.sh"), "last-failure",
+            "python3", str(self.scripts_copy / "cfq_report.py"), "last-failure",
             str(fresh_batch), "01-a", env={"HOME": str(self.home)},
         )
         self.assertFalse(

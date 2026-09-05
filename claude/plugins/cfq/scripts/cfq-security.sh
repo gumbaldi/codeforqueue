@@ -15,6 +15,7 @@ command -v jq >/dev/null 2>&1 || { echo "cfq-security.sh: jq is required" >&2; e
 repo="${1:?usage: cfq-security.sh <repo-root>}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cfq="$script_dir/../bin/cfq"
 
 # timeout/gtimeout is an optional capability (per config/dependencies.txt), not a global cfq hard
 # dependency — its absence degrades this script's network-bound checks instead of failing them.
@@ -24,8 +25,8 @@ if command -v timeout >/dev/null 2>&1; then
 elif command -v gtimeout >/dev/null 2>&1; then
   sec_timeout_bin="gtimeout"
 fi
-sec_timeout=$("$script_dir/cfq-settings.sh" get securityTimeoutSeconds)
-sec_cap=$("$script_dir/cfq-settings.sh" get securityFindingsCap)
+sec_timeout=$("$cfq" settings get securityTimeoutSeconds)
+sec_cap=$("$cfq" settings get securityFindingsCap)
 
 run_timeout() {
   [ -n "$sec_timeout_bin" ] || return 1

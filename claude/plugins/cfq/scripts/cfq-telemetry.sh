@@ -9,12 +9,13 @@ set -eu
 command -v jq >/dev/null 2>&1 || { echo "cfq-telemetry.sh: jq is required" >&2; exit 1; }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cfq="$script_dir/../bin/cfq"
 # shellcheck source=cfq-paths.sh
 . "$script_dir/cfq-paths.sh"
 
 # pwd-based resolution (matches ctx-usage.sh), shared via the runtime adapter.
 transcript_path() {
-  "$script_dir/cfq-runtime.sh" transcript-path
+  "$cfq" runtime transcript-path
 }
 
 cmd="${1:-}"
@@ -143,7 +144,7 @@ case "$cmd" in
   sync)
     repo="${2:-$(git rev-parse --show-toplevel 2>/dev/null || true)}"
     [ -n "$repo" ] || exit 0
-    target=$("$script_dir/cfq-settings.sh" get telemetrySyncRepo 2>/dev/null || true)
+    target=$("$cfq" settings get telemetrySyncRepo 2>/dev/null || true)
     case "$target" in ''|null) exit 0 ;; esac
     src="$(telemetry_log "$repo")"
     [ -f "$src" ] || exit 0

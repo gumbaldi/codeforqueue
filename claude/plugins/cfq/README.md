@@ -177,7 +177,9 @@ it's flagged in the dashboard instead.
 `PreToolUse` on `Write`/`Edit` is the only hook class that can structurally break a `pfq` session.
 It is the only class that can deny a tool call, and every file a `pfq` session produces is written
 through that tool. A `PreToolUse` hook on `Bash` rewrites commands rather than denying them, and
-`SessionStart` runs before the skill is loaded — neither can stop a park.
+`SessionStart` runs before the skill is loaded — neither can stop a park. The bundled `SessionStart`
+hook itself (the host dependency check) now runs through `${CLAUDE_PLUGIN_ROOT}/bin/cfq doctor
+hook` rather than calling `cfq-doctor.sh` directly, same as every other cfq entrypoint.
 
 A guard hook that restricts writes must let these paths through, or `pfq` dies mid-park with a
 half-written batch in the queue:
@@ -296,7 +298,8 @@ the language and documentation-level settings.
 
 ## Host dependencies
 
-Required: `bash`, `git`, `jq`. Installing the plugin does not install any of these — it only adds
+Required: `bash`, `git`, `jq`, `python3` (3.8 or newer, runs the ported implementations — settings,
+changelog, report, doctor). Installing the plugin does not install any of these — it only adds
 the plugin's own files. `bin/cfq doctor check` reports what's missing and, for a required gap, a
 platform-appropriate install hint; the bundled `SessionStart` hook runs it automatically and stays
 completely silent on a healthy host, only warning (user and Claude both) when a required command is

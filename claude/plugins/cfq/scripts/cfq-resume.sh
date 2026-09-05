@@ -13,10 +13,11 @@ batch_dir="${batch_dir%/}"
 [ -d "$batch_dir" ] || { echo "cfq-resume.sh: no such batch directory: $batch_dir" >&2; exit 1; }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cfq="$script_dir/../bin/cfq"
 batch_name="$(basename "$batch_dir")"
 report="$batch_dir/report.json"
 
-branch_json=$("$script_dir/cfq-branch.sh" plan "$repo_root" "$batch_name" 2>/dev/null \
+branch_json=$("$cfq" branch plan "$repo_root" "$batch_name" 2>/dev/null \
   || echo '{"mode":null,"batch":null,"batchNumber":null,"branch":null,"base":null,"candidates":[]}')
 branch_name=$(jq -r '.branch // empty' <<<"$branch_json")
 

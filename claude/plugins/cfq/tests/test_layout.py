@@ -2,17 +2,22 @@
 
 import pathlib
 import subprocess
+import sys
 import unittest
 
 from cfq_testlib import CfqTestCase, PLUGIN_ROOT, SCRIPTS_DIR, sh_source
 
+sys.path.insert(0, str(SCRIPTS_DIR))
+from cfq_lib import paths as cfq_lib_paths  # noqa: E402
+
 PATHS_SH = SCRIPTS_DIR / "cfq-paths.sh"
 
 # (helper_name, args, expected) — batch 014 phase 02 reuses this table to parametrise the same
-# cases against cfq_lib/paths.py.
+# cases against cfq_lib/paths.py. queue_dir was a pure alias for cfq_repo_dir with a single
+# caller (found in the maintenance run of 2026-09-04, since removed) -- phase 02 dropped it from
+# scripts/cfq-paths.sh and never carried it into Python, so nine helpers, not ten.
 PATH_HELPER_CASES = [
     ("cfq_repo_dir", ["{repo}"], "{repo}/.claude/cfq"),
-    ("queue_dir", ["{repo}"], "{repo}/.claude/cfq"),
     ("plan_dir", ["{repo}"], "{repo}/.claude/cfq/plan"),
     ("impl_dir", ["{repo}"], "{repo}/.claude/cfq/impl"),
     ("impl_done_dir", ["{repo}"], "{repo}/.claude/cfq/impl/done"),
@@ -49,6 +54,27 @@ class LayoutTest(CfqTestCase):
             got = sh_source(PATHS_SH, helper, *resolved_args).strip()
             want = expected.format(repo=self.repo)
             self.assertEqual(got, want, msg=f"{helper}")
+
+    def test_paths_sh_and_cfq_lib_paths_agree(self):
+        # Runs every PATH_HELPER_CASES entry through both implementations -- scripts/cfq-paths.sh
+        # (sourced) and cfq_lib/paths.py (called directly) -- and asserts byte-identical output.
+        # This is what makes the deliberate duplication in cfq_lib/paths.py safe: the two copies
+        # cannot drift without this test going red.
+        for helper, args, expected in PATH_HELPER_CASES:
+            with self.subTest(helper=helper):
+                resolved_args = [a.format(repo=self.repo) for a in args]
+                want = expected.format(repo=self.repo)
+
+                sh_got = sh_source(PATHS_SH, helper, *resolved_args).strip()
+                self.assertEqual(sh_got, want, msg=f"cfq-paths.sh {helper}")
+
+                py_fn = getattr(cfq_lib_paths, helper)
+                py_got = py_fn(*resolved_args)
+                self.assertEqual(py_got, want, msg=f"cfq_lib.paths.{helper}")
+
+                self.assertEqual(
+                    sh_got, py_got, msg=f"{helper}: cfq-paths.sh and cfq_lib/paths.py disagree"
+                )
 
     def test_ensure_and_status(self):
         # 2. ensure creates the canonical dirs and adds exactly one exclude block

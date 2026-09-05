@@ -26,14 +26,14 @@ esac
 command -v jq >/dev/null 2>&1 || { echo "cfq-scan.sh: jq is required" >&2; exit 1; }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-registry="$script_dir/cfq-registry.sh"
+cfq="$script_dir/../bin/cfq"
 # shellcheck source=cfq-paths.sh
 . "$script_dir/cfq-paths.sh"
 
-candidates=$("$registry" list 2>/dev/null || true)
+candidates=$("$cfq" registry list 2>/dev/null || true)
 
 old_ifs=$IFS; IFS=','
-for root in $("$script_dir/cfq-settings.sh" get scanRoots); do
+for root in $("$cfq" settings get scanRoots); do
   IFS=$old_ifs
   root="${root/#\~/$HOME}"
   [ -d "$root" ] || continue
@@ -48,7 +48,8 @@ IFS=$old_ifs
 candidates=$(printf '%s\n' "$candidates" | sed '/^$/d' | sort -u)
 
 for repo in $candidates; do
-  "$registry" add "$repo" >/dev/null
+  # Direct sibling call: inside a per-repo loop, see CLAUDE.md's dispatcher-loop-exception note.
+  "$script_dir/cfq-registry.sh" add "$repo" >/dev/null
 done
 
 trim() { sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$1"; }
@@ -74,7 +75,8 @@ while IFS= read -r repo; do
   [ -n "$repo" ] || continue
   qdir="$(cfq_repo_dir "$repo")"
   [ -d "$qdir" ] || continue
-  stale_s=$("$script_dir/cfq-settings.sh" get --repo "$repo" sessionStaleSeconds)
+  # Direct sibling call: inside a per-repo loop, see CLAUDE.md's dispatcher-loop-exception note.
+  stale_s=$(python3 "$script_dir/cfq_settings.py" get --repo "$repo" sessionStaleSeconds)
 
   plan=$(find "$qdir/plan" -maxdepth 1 -name '*.md' -type f 2>/dev/null | wc -l)
   todo=$(find "$qdir/todo" -maxdepth 1 -name '*.md' -type f 2>/dev/null | wc -l)

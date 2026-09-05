@@ -1,7 +1,8 @@
 """Migrated from test-pfq-preflight.sh (scripts/cfq-pfq-preflight.sh).
 
-The stub renames `cfq-settings.sh` and shadows it by filename. When that script is ported to
-Python, this stub has to shadow `cfq_settings.py` instead — see batch `014` phase 02.
+The stub renames `cfq_settings.py` and shadows it by filename — batch `014` phase 02 ported
+settings to Python, so the stub is a Python script now too (the dispatcher invokes `.py` files
+with `python3`).
 """
 
 import os
@@ -18,22 +19,28 @@ class PfqPreflightTest(CfqTestCase):
         super().setUp()
         # Copies the whole scripts/ dir so cfq-pfq-preflight.sh's own script_dir resolution (and
         # every sibling script it shells out to, e.g. cfq-maintenance.sh) resolves inside the
-        # copy, then swaps cfq-settings.sh for a wrapper that logs every subcommand before
-        # delegating to the real binary.
+        # copy, then swaps cfq_settings.py for a wrapper that logs every subcommand before
+        # delegating to the real module. bin/ is copied alongside scripts/ (same relative layout
+        # as the real plugin) because internal sibling calls now route through bin/cfq, which
+        # resolves its own NOUN_SCRIPT table relative to itself.
         self.scripts_copy = self._repos_dir / "scripts"
         shutil.copytree(PLUGIN_ROOT / "scripts", self.scripts_copy)
-        real = self.scripts_copy / "cfq-settings-real.sh"
-        (self.scripts_copy / "cfq-settings.sh").rename(real)
+        shutil.copytree(PLUGIN_ROOT / "bin", self._repos_dir / "bin")
+        real = self.scripts_copy / "cfq_settings_real.py"
+        (self.scripts_copy / "cfq_settings.py").rename(real)
         self.count_log = self._repos_dir / "settings-calls.log"
         self.count_log.write_text("")
-        stub = self.scripts_copy / "cfq-settings.sh"
-        stub.write_text(f"""#!/usr/bin/env bash
-set -eu
-d="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
-echo "$1" >> "{self.count_log}"
-exec "$d/cfq-settings-real.sh" "$@"
+        stub = self.scripts_copy / "cfq_settings.py"
+        stub.write_text(f"""#!/usr/bin/env python3
+import pathlib
+import subprocess
+import sys
+
+d = pathlib.Path(__file__).resolve().parent
+with open({str(self.count_log)!r}, "a") as f:
+    f.write((sys.argv[1] if len(sys.argv) > 1 else "") + "\\n")
+sys.exit(subprocess.run([sys.executable, str(d / "cfq_settings_real.py"), *sys.argv[1:]]).returncode)
 """)
-        stub.chmod(0o755)
         self.pf = self.scripts_copy / "cfq-pfq-preflight.sh"
 
     def _run_pf(self, *args, env=None):
@@ -140,7 +147,7 @@ exec "$d/cfq-settings-real.sh" "$@"
         list_calls = self.count_log.read_text().splitlines().count("list")
         self.assertEqual(
             list_calls, 1,
-            msg=f"expected exactly 1 'list' cfq-settings.sh call, got {list_calls} (log: {self.count_log.read_text()!r})",
+            msg=f"expected exactly 1 'list' cfq_settings.py call, got {list_calls} (log: {self.count_log.read_text()!r})",
         )
         for k in [
             "planModels", "allowAnyModel", "planExploreModel", "planExploreModelComplex",

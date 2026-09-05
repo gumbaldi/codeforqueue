@@ -20,6 +20,7 @@ if [ "${1:-}" = "--select" ]; then
 fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cfq="$script_dir/../bin/cfq"
 
 resolved_root=$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null) || {
   jq -n --arg repo "$repo" '{status: "NO_REPO", repo: {root: $repo}}'
@@ -27,11 +28,11 @@ resolved_root=$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null) || {
 }
 repo="$resolved_root"
 
-settings=$("$script_dir/cfq-settings.sh" list --repo "$repo")
+settings=$("$cfq" settings list --repo "$repo")
 policy=$(jq -c '{implModels, allowAnyModel, implBlockedPlugins, onePhasePerSession, implExploreModel, implExploreModelComplex}' <<<"$settings")
 reporting=$(jq -c '{reportDir, htmlReport}' <<<"$settings")
 
-candidates=$("$script_dir/cfq-scan.sh" | jq -c --arg repo "$repo" \
+candidates=$("$cfq" scan | jq -c --arg repo "$repo" \
   '[(.repos[]? | select(.path == $repo) | .batches[]?
      | select(.archived == false and .open > 0))]')
 
@@ -87,10 +88,10 @@ fi
 
 qdir="$repo/.claude/cfq/impl"
 batch_dir="$qdir/$chosen"
-brief_text=$("$script_dir/cfq-brief.sh" "$batch_dir")
+brief_text=$("$cfq" brief "$batch_dir")
 cand=$(jq -c --arg n "$chosen" '.[] | select(.name == $n)' <<<"$candidates")
 
-resume_json=$("$script_dir/cfq-resume.sh" "$repo" "$batch_dir")
+resume_json=$("$cfq" resume "$repo" "$batch_dir")
 branch_json=$(jq -c '.branch' <<<"$resume_json")
 resume_only=$(jq -c 'del(.branch)' <<<"$resume_json")
 
@@ -99,7 +100,7 @@ next_phase="OK"
 if [ -n "$next" ]; then
   next_slug=$(jq -r '.slug' <<<"$next")
   next_size=$(jq -r '.size' <<<"$next")
-  failed=$("$script_dir/cfq-report.sh" last-failure "$batch_dir" "$next_slug")
+  failed=$("$cfq" report last-failure "$batch_dir" "$next_slug")
   next_phase_json=$(jq -c --argjson f "$failed" '. + {failedAttempt: $f}' <<<"$next")
 
   gate_line=$("$script_dir/ctx-usage.sh" gate "$next_size")

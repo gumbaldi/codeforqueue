@@ -10,6 +10,7 @@ set -eu
 command -v jq >/dev/null 2>&1 || { echo "cfq-layout.sh: jq is required" >&2; exit 1; }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cfq="$script_dir/../bin/cfq"
 # shellcheck source=cfq-paths.sh
 . "$script_dir/cfq-paths.sh"
 
@@ -50,7 +51,7 @@ do_ensure_dirs() {
 
 do_sync_git_policy() {
   local repo="$1" policy ef stripped
-  policy=$("$script_dir/cfq-settings.sh" get --repo "$repo" gitStatePolicy)
+  policy=$("$cfq" settings get --repo "$repo" gitStatePolicy)
   ef=$(exclude_file "$repo")
   [ -n "$ef" ] || return 0
 
@@ -91,7 +92,7 @@ case "$cmd" in
     if [ -n "$ef" ] && [ -f "$ef" ] && grep -qxF "$BLOCK_BEGIN" "$ef" 2>/dev/null; then
       block="present"
     fi
-    policy=$("$script_dir/cfq-settings.sh" get --repo "$repo" gitStatePolicy)
+    policy=$("$cfq" settings get --repo "$repo" gitStatePolicy)
     canonical="false"; [ -d "$(cfq_repo_dir "$repo")" ] && canonical="true"
     jq -n --arg p "$policy" --arg b "$block" --argjson c "$canonical" \
       '{gitStatePolicy: $p, excludeBlock: $b, canonical: $c}'

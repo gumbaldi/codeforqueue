@@ -35,7 +35,7 @@ class TelemetryTest(CfqTestCase):
 
         self.jsonl = self.repo / ".claude" / "cfq" / "telemetry.jsonl"
 
-        # Seed report.json with a phase entry, as implement-for-queue would via cfq-report.sh
+        # Seed report.json with a phase entry, as implement-for-queue would via cfq_report.py
         # append.
         self.run_cfq(
             "report", "append", str(self.batch),

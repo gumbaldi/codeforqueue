@@ -13,6 +13,7 @@ command -v jq >/dev/null 2>&1 || { echo "cfq-pfq-preflight.sh: jq is required" >
 repo="${1:?usage: cfq-pfq-preflight.sh <repo-root>}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cfq="$script_dir/../bin/cfq"
 
 resolved_root=$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null) || {
   jq -n --arg repo "$repo" '{status: "NO_REPO", repo: {root: $repo, known: false}}'
@@ -20,17 +21,17 @@ resolved_root=$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null) || {
 }
 repo="$resolved_root"
 
-settings=$("$script_dir/cfq-settings.sh" list --repo "$repo")
+settings=$("$cfq" settings list --repo "$repo")
 
 known="false"
-"$script_dir/cfq-registry.sh" list 2>/dev/null | grep -qxF "$repo" && known="true"
+"$cfq" registry list 2>/dev/null | grep -qxF "$repo" && known="true"
 
-batches=$("$script_dir/cfq-scan.sh" | jq -c --arg repo "$repo" \
+batches=$("$cfq" scan | jq -c --arg repo "$repo" \
   '[(.repos[]? | select(.path == $repo) | .batches[]?
      | select(.archived == false and .open > 0)
      | {name, priority, open, dependsOn})]')
 
-maint_raw=$("$script_dir/cfq-maintenance.sh" due "$repo")
+maint_raw=$("$cfq" maintenance due "$repo")
 maint_status=$(awk '{print $1}' <<<"$maint_raw")
 maint_n=$(awk '{print $2}' <<<"$maint_raw")
 maint_n_json="null"; [ -n "$maint_n" ] && maint_n_json="$maint_n"

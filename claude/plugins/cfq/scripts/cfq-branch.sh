@@ -14,6 +14,7 @@ batch_name="${3:?usage: cfq-branch.sh plan <repo-root> <batch-dir-name>}"
 [ "$cmd" = "plan" ] || { echo "cfq-branch.sh: unknown command '$cmd'" >&2; exit 1; }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cfq="$script_dir/../bin/cfq"
 
 # New-format batch directory names are <digits>-<YYYY-MM-DD>-<slug> (the number precedes the
 # date); legacy names start directly with the date. Prints the plain integer (no leading zeros) on
@@ -28,7 +29,7 @@ number_json='null'; [ -n "$number" ] && number_json="$number"
 
 slug=$(printf '%s' "$batch_name" | sed -E 's/^[0-9]+-[0-9]{4}-[0-9]{2}-[0-9]{2}-//; s/^[0-9]{4}-[0-9]{2}-[0-9]{2}-//')
 
-branch_per_batch=$("$script_dir/cfq-settings.sh" get branchPerBatch)
+branch_per_batch=$("$cfq" settings get branchPerBatch)
 if [ "$branch_per_batch" = "false" ]; then
   jq -n --arg batch "$batch_name" --argjson num "$number_json" \
     '{mode: "off", batch: $batch, batchNumber: $num, branch: null, base: null, candidates: [], remoteChecked: false, remoteWarning: null}'
@@ -48,7 +49,7 @@ fi
 # to still exist; a deleted branch falls through to the suffix match below rather than being
 # handed to the caller as an unresolvable "continue". Also falls through when the changelog
 # doesn't know this batch yet, e.g. a batch parked before the changelog existed.
-existing="$("$script_dir/cfq-changelog.sh" branch-for "$repo_root" "$batch_name" 2>/dev/null || true)"
+existing="$("$cfq" changelog branch-for "$repo_root" "$batch_name" 2>/dev/null || true)"
 if [ -n "$existing" ] && ! git -C "$repo_root" rev-parse --verify -q "refs/heads/$existing" >/dev/null 2>&1 \
   && ! git -C "$repo_root" rev-parse --verify -q "refs/remotes/origin/$existing" >/dev/null 2>&1; then
   existing=""

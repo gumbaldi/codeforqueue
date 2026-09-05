@@ -1,5 +1,7 @@
-# Canonical, shell-readable host dependency inventory for cfq. Parsed with plain `read` by
-# cfq-doctor.sh — no jq, since this file is the last line of defense when jq itself is missing.
+# Canonical dependency inventory for cfq, parsed line-wise by cfq_doctor.py — no jq, since jq is
+# itself one of the rows below. bin/cfq's own python3 guard is what reports a missing interpreter
+# before cfq_doctor.py can even run, at the layer beneath any Python; the python3 row here is what
+# cfq_doctor.py itself reports once it's running.
 # Format: name(s)|kind|short reason. Comma-separated names in "alternative" rows are equivalent
 # choices (first found wins). kind is one of: required, alternative, optional.
 #
@@ -9,6 +11,7 @@
 bash|required|shell interpreter every cfq script runs under
 git|required|branch, commit and diff operations in most scripts
 jq|required|JSON read/write in every script except cfq-doctor.sh itself
+python3|required|runs the ported implementations (settings, changelog, report, doctor)
 timeout,gtimeout|alternative|bounds network calls in cfq-security.sh (gtimeout on stock macOS)
 gh|optional|GitHub security-finding lookups (Dependabot/code-scanning) in cfq-security.sh
 tea|optional|Gitea security-finding lookups in cfq-security.sh

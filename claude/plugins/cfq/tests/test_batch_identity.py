@@ -27,14 +27,14 @@ class BatchIdentityTest(CfqTestCase):
             msg="cfq-version.sh exists -- CFQ must not resolve application/plugin versions",
         )
         self.assertIsNone(
-            grep(r'"(versionSource|appVersion|cfqVersion|versionDrift|batchSeq)":', SCRIPTS_DIR / "cfq-settings.sh"),
-            msg="cfq-settings.sh schema defines a version-identity setting key",
+            grep(r'"(versionSource|appVersion|cfqVersion|versionDrift|batchSeq)":', SCRIPTS_DIR / "cfq_settings.py"),
+            msg="cfq_settings.py schema defines a version-identity setting key",
         )
 
     def test_changelog_never_carries_version_field(self):
         self.assertIsNone(
-            grep(r"printf.*'  (version|appVersion|cfqVersion|versionSource): ", SCRIPTS_DIR / "cfq-changelog.sh"),
-            msg="cfq-changelog.sh renders a version-shaped changelog field",
+            grep(r'"  (version|appVersion|cfqVersion|versionSource): ', SCRIPTS_DIR / "cfq_changelog.py"),
+            msg="cfq_changelog.py renders a version-shaped changelog field",
         )
 
     def test_no_second_branch_version_increment_mechanism(self):
@@ -61,7 +61,7 @@ class BatchIdentityTest(CfqTestCase):
             )
 
     def test_history_scan_keys_off_batch_number_only(self):
-        text = (SCRIPTS_DIR / "cfq-changelog.sh").read_text()
+        text = (SCRIPTS_DIR / "cfq_changelog.py").read_text()
         for line in text.splitlines():
             if "--all" in line and "trailers:key=CFQ-Batch," in line:
                 self.fail(
@@ -70,20 +70,20 @@ class BatchIdentityTest(CfqTestCase):
                 )
 
     def test_phase_commit_has_required_trailers(self):
-        lines = (SCRIPTS_DIR / "cfq-changelog.sh").read_text().splitlines()
+        lines = (SCRIPTS_DIR / "cfq_changelog.py").read_text().splitlines()
         block_lines = []
         capturing = False
         for line in lines:
-            if "interpret-trailers" in line:
+            if '"interpret-trailers"' in line:
                 capturing = True
             if capturing:
                 block_lines.append(line)
-                if 'message_file"' in line:
+                if "message_file" in line and "--trailer" not in line:
                     break
         block = "\n".join(block_lines)
         for t in ("CFQ-Batch-Number", "CFQ-Batch", "CFQ-Phase", "CFQ-Phase-Status"):
             self.assertIn(
-                f'--trailer "{t}=', block, msg=f"commit-message trailer rendering is missing {t}"
+                f'"{t}=', block, msg=f"commit-message trailer rendering is missing {t}"
             )
 
     def test_pfq_never_hand_rolls_batch_number_padding(self):

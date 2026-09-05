@@ -1,10 +1,11 @@
 """Migrated from test-report.sh.
 
-Self-test for scripts/cfq-report.sh: append/set-commit/summary/html/last-failure/security plus
+Self-test for scripts/cfq_report.py: append/set-commit/summary/html/last-failure/security plus
 the index/detail surface.
 """
 
 import json
+import shutil
 import subprocess
 import unittest
 
@@ -165,16 +166,16 @@ class TestReport(CfqTestCase):
         }))
 
         # Call-counting stub for the N+1-regression guard: index must call cfq-scan.sh exactly
-        # once, regardless of how many report-bearing batches exist. cfq-report.sh resolves its
-        # own script_dir from its own path, so the stub has to be invoked directly by path --
+        # once, regardless of how many report-bearing batches exist. cfq_report.py resolves its
+        # own SCRIPT_DIR from its own path, so the stub has to be invoked directly by path --
         # this is the one case in this file that cannot go through bin/cfq, since the dispatcher
         # would always exec the real, unstubbed scripts/ directory.
         scan_calls = self._repos_dir / "scan-call-count"
         stub_dir = self._repos_dir / "stub-scripts"
         stub_dir.mkdir()
         scripts_dir = PLUGIN_ROOT / "scripts"
-        (stub_dir / "cfq-report.sh").write_bytes((scripts_dir / "cfq-report.sh").read_bytes())
-        (stub_dir / "cfq-report.sh").chmod(0o755)
+        (stub_dir / "cfq_report.py").write_bytes((scripts_dir / "cfq_report.py").read_bytes())
+        shutil.copytree(scripts_dir / "cfq_lib", stub_dir / "cfq_lib")
         scan_calls.write_text("")
         stub_scan = stub_dir / "cfq-scan.sh"
         stub_scan.write_text(f"""#!/usr/bin/env bash
@@ -185,7 +186,7 @@ exec bash "{scripts_dir / 'cfq-scan.sh'}" "$@"
 
         # Direct invocation of the stubbed copy, matching the Bash original.
         proc = subprocess.run(
-            [str(stub_dir / "cfq-report.sh"), "index"],
+            ["python3", str(stub_dir / "cfq_report.py"), "index"],
             capture_output=True, text=True,
             env={**self._base_env(), "HOME": str(self.home), "CFQ_SCAN_ROOTS": str(self._repos_dir)},
         )

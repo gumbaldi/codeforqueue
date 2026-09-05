@@ -6,7 +6,7 @@ set -eu
 command -v jq >/dev/null 2>&1 || { echo "cfq-maintenance.sh: jq is required" >&2; exit 1; }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-settings_sh="$script_dir/cfq-settings.sh"
+cfq="$script_dir/../bin/cfq"
 # shellcheck source=cfq-paths.sh
 . "$script_dir/cfq-paths.sh"
 
@@ -17,7 +17,7 @@ case "$cmd" in
   due)
     repo="${2:?usage: cfq-maintenance.sh due <repo-root>}"
 
-    every=$("$settings_sh" get maintenanceEvery)
+    every=$("$cfq" settings get maintenanceEvery)
     if [ "$every" = "0" ]; then
       echo OFF
       exit 0

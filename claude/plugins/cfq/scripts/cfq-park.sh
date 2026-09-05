@@ -8,6 +8,7 @@ set -eu
 command -v jq >/dev/null 2>&1 || { echo "cfq-park.sh: jq is required" >&2; exit 1; }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cfq="$script_dir/../bin/cfq"
 # shellcheck source=cfq-paths.sh
 . "$script_dir/cfq-paths.sh"
 
@@ -22,7 +23,7 @@ case "$priority" in
   *) echo "cfq-park.sh: priority must be high|normal, got '$priority'" >&2; exit 1 ;;
 esac
 
-"$script_dir/cfq-layout.sh" ensure "$repo_root" >/dev/null
+"$cfq" layout ensure "$repo_root" >/dev/null
 
 dir="$(impl_dir "$repo_root")/$batch_name"
 mkdir -p "$dir"
@@ -40,6 +41,6 @@ if [ "${#depends[@]}" -gt 0 ]; then
   printf '%s\n' "${depends[@]}" > "$dir/.dependsOn"
 fi
 
-"$script_dir/cfq-registry.sh" add "$repo_root" >/dev/null
+"$cfq" registry add "$repo_root" >/dev/null
 
 printf '%s\n' "$dir"

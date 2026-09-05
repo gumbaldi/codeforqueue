@@ -7,6 +7,7 @@ set -eu
 command -v jq >/dev/null 2>&1 || { echo "cfq-lock.sh: jq is required" >&2; exit 1; }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cfq="$script_dir/../bin/cfq"
 # shellcheck source=cfq-paths.sh
 . "$script_dir/cfq-paths.sh"
 
@@ -31,12 +32,12 @@ case "$cmd" in
   acquire)
     repo="${2:?usage: cfq-lock.sh acquire <repo-root> <batch>}"
     batch="${3:?usage: cfq-lock.sh acquire <repo-root> <batch>}"
-    "$script_dir/cfq-layout.sh" ensure "$repo" >/dev/null
-    stale_s=$("$script_dir/cfq-settings.sh" get --repo "$repo" sessionStaleSeconds)
+    "$cfq" layout ensure "$repo" >/dev/null
+    stale_s=$("$cfq" settings get --repo "$repo" sessionStaleSeconds)
     f="$(lockfile "$repo")"
     mkdir -p "$(dirname "$f")"
     sid="${CLAUDE_CODE_SESSION_ID:-unknown}"
-    tpath=$("$script_dir/cfq-runtime.sh" transcript-path --repo "$repo" --exact)
+    tpath=$("$cfq" runtime transcript-path --repo "$repo" --exact)
 
     if [ -f "$f" ]; then
       holder=$(jq -r '.session_id // ""' "$f" 2>/dev/null || true)
@@ -78,7 +79,7 @@ case "$cmd" in
     repo="${2:?usage: cfq-lock.sh status <repo-root>}"
     f="$(lockfile "$repo")"
     [ -f "$f" ] || { echo "FREE"; exit 0; }
-    stale_s=$("$script_dir/cfq-settings.sh" get --repo "$repo" sessionStaleSeconds)
+    stale_s=$("$cfq" settings get --repo "$repo" sessionStaleSeconds)
     hepoch=$(jq -r '.epoch // 0' "$f")
     state=$(jq -c . "$f" | liveness "$hepoch" "$stale_s")
     jq -r --arg st "$state" '"\($st | ascii_upcase) \(.session_id) \(.batch) \(.at)"' "$f"

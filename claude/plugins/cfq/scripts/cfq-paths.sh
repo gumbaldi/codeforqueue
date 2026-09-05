@@ -3,7 +3,6 @@
 # file; that's the isolated migration utility's job (scripts/migrations/cfq-layout-v1.sh).
 
 cfq_repo_dir() { printf '%s/.claude/cfq' "$1"; }
-queue_dir() { cfq_repo_dir "$1"; }
 plan_dir() { printf '%s/.claude/cfq/plan' "$1"; }
 impl_dir() { printf '%s/.claude/cfq/impl' "$1"; }
 impl_done_dir() { printf '%s/.claude/cfq/impl/done' "$1"; }
