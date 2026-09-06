@@ -45,9 +45,15 @@ branch string from a number/slug:
 
 `bin/cfq branch plan` is remote-aware: it fetches `origin` once (best-effort — no `origin`, or the
 fetch fails offline/sandboxed, and everything falls back to local-only behavior unchanged) before
-deciding, so a stale local `main`/branch never gets silently proposed as a base. Two additive
-fields ride along with every response: `remoteChecked` (bool) and `remoteWarning` (string or
-`null`, set only when local has commits `origin` doesn't and that gap can't be auto-resolved).
+deciding, so a stale local `main`/branch never gets silently proposed as a base. On the `new` path,
+`origin/*` is the source of truth for `candidates` — each is an object (`name`, `ref`,
+`aheadOfMain`, `behindRemote`, `aheadRemote`, `localOnly`, `highestBatch`, `mergedIntoOriginMain`,
+`lastCommit`), ranked by `lastCommit` descending, and `base`/`baseRef` already name the
+recommended one (`base: "main"` / `baseRef` pointing at `origin/main` when `candidates` is empty —
+never `null` waiting on a question). Two additive top-level fields ride along with every response:
+`remoteChecked` (bool) and `remoteWarning` (string or `null`, set only when local `main` — on the
+`new` path — or the persisted branch — on `continue` — has commits `origin` doesn't and that gap
+can't be auto-resolved; it no longer affects candidate selection, it is purely a heads-up).
 
 - **`off`** (`branchPerBatch` is `false`) → `Branch: ➖ branchPerBatch off`, skip everything below.
 - **`continue`** (a branch for this batch already exists) → `git checkout "<branch>"`, don't write
@@ -55,23 +61,27 @@ fields ride along with every response: `remoteChecked` (bool) and `remoteWarning
   `origin/<branch>` is fast-forwarded automatically before checkout. `remoteWarning` non-null here
   (local ahead of/diverged from `origin/<branch>`) doesn't block — `git checkout "<branch>"` still
   runs, but the `Branch` status line surfaces the warning as a `⚠️` note.
-- **`new`** → `base` is already `main` when `candidates` is empty; local `main` purely behind
-  `origin/main` is fast-forwarded first, same as the `continue` case. Non-empty `candidates` → one
-  `AskUserQuestion` listing every entry in `candidates` plus `main`, deduplicated (`main` itself
-  ends up in `candidates` when it's the one that's ahead of `origin/main` — see below), asking
-  which one the new branch builds on. Recommended (first, labelled `(Recommended)`): the currently
-  checked-out branch if it's in the list, otherwise the first candidate. Each option's description
-  names how many commits it is ahead of `main` (`git rev-list --count main..<branch>`) — except the
-  branch `remoteWarning` is about: its option is phrased "use local `<branch>` anyway (ahead of
-  origin, deliberate)" and the question's context includes `remoteWarning` verbatim, so the choice
-  to override is explicit rather than an unremarked list entry. Then:
+- **`new`** → a genuinely empty `candidates` list resolves silently to `base`/`baseRef` (`main`/
+  `origin/main`), no question. Otherwise one `AskUserQuestion` listing every entry in `candidates`
+  (already ranked), asking which one the new branch builds on. Recommended (first, labelled
+  `(Recommended)`): `base` — the newest by `lastCommit`, never the checked-out branch. Each other
+  option's description names its `aheadOfMain`, plus `local only` / `already contained in
+  origin/main` / `behind origin by <behindRemote>` where applicable. The free-text answer
+  (`AskUserQuestion`'s built-in "Other") is resolved with `bin/cfq branch check "<repo-root>"
+  "<name>"`: `UNRESOLVED` → ask once more naming the unresolvable input; a second miss ends the
+  session without touching anything, exactly like the dirty-tree rule below. On `OK`, surface both
+  its warnings separately when they apply — "`<name>` is `<behind>` commit(s) behind
+  `origin/<name>`" and "`<newerCandidate.name>` has a newer commit (`<newerCandidate.lastCommit>`)"
+  — before the checkout runs, and use its `ref` as `<baseRef>` and `<name>` as `<base>` below. Then:
 
 ```bash
-git checkout "<base>"
-git checkout -b "<branch>"
+git checkout -b "<branch>" "<baseRef>"
 "<plugin-root>/bin/cfq" changelog init "<repo-root>" "<branch>" "<base>" "<batch>"
 "<plugin-root>/bin/cfq" branch plan "<repo-root>" "<batch>"
 ```
+
+`changelog init` keeps receiving `<base>` (the plain branch name), not `<baseRef>` — the changelog
+records which branch the work builds on, not which ref was used to cut it.
 
 The `new`-mode `bin/cfq branch plan` re-run above is the one and only place this batch's mutation
 step calls it directly — solely to reconfirm the branch now exists post-checkout; `continue`/`off`

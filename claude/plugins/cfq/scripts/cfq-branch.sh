@@ -30,6 +30,14 @@ if git -C "$repo_root" remote get-url origin >/dev/null 2>&1 \
   remote_checked=true
 fi
 
+# Short names of every `origin/*` branch, `origin/HEAD` dropped, `origin/` prefix stripped.
+# Shared by `check`'s newer-candidate scan and `plan`'s new-mode candidate collection so the
+# "newest commit among these refs" enumeration is never done twice.
+list_remote_branch_names() {
+  git -C "$repo_root" branch -r --format='%(refname:short)' 2>/dev/null \
+    | sed -n 's#^origin/##p' | grep -v '^HEAD$' || true
+}
+
 if [ "$cmd" = "check" ]; then
   branch_name="${3:?$usage}"
 
@@ -70,13 +78,13 @@ if [ "$cmd" = "check" ]; then
   newer_name=""
   newer_epoch=0
   while IFS= read -r rb; do
-    [ -n "$rb" ] && [ "$rb" != "origin/HEAD" ] || continue
-    epoch=$(git -C "$repo_root" log -1 --format=%ct "refs/remotes/$rb" 2>/dev/null) || continue
+    [ -n "$rb" ] || continue
+    epoch=$(git -C "$repo_root" log -1 --format=%ct "refs/remotes/origin/$rb" 2>/dev/null) || continue
     if [ "$epoch" -gt "$ref_epoch" ] && [ "$epoch" -gt "$newer_epoch" ]; then
       newer_epoch="$epoch"
-      newer_name="${rb#origin/}"
+      newer_name="$rb"
     fi
-  done < <(git -C "$repo_root" branch -r --format='%(refname:short)' 2>/dev/null)
+  done < <(list_remote_branch_names)
 
   newer_candidate_json='null'
   if [ -n "$newer_name" ]; then
@@ -156,36 +164,134 @@ fi
 
 branch="cfq/${batch_name}"
 
-candidates=()
-while IFS= read -r b; do
-  [ -n "$b" ] && [ "$b" != main ] || continue
-  cnt=$(git -C "$repo_root" rev-list --count main.."$b")
-  [ "$cnt" -gt 0 ] && candidates+=("$b")
-done < <(git -C "$repo_root" branch --format='%(refname:short)')
+# --- Candidate collection: `origin/*` is the source of truth once remote-checked; local-only
+# branches (no remote counterpart) are still offered, explicitly marked. Offline falls back to
+# local branches only, every one implicitly local-only.
+candidate_names=()
+declare -A cand_ref=()
+declare -A cand_local_only=()
 
+if [ "$remote_checked" = true ]; then
+  while IFS= read -r rb; do
+    [ -n "$rb" ] || continue
+    candidate_names+=("$rb")
+    cand_ref["$rb"]="refs/remotes/origin/$rb"
+    cand_local_only["$rb"]=false
+  done < <(list_remote_branch_names)
+
+  while IFS= read -r lb; do
+    [ -n "$lb" ] && [ "$lb" != main ] || continue
+    if [ -z "${cand_ref[$lb]+x}" ]; then
+      candidate_names+=("$lb")
+      cand_ref["$lb"]="refs/heads/$lb"
+      cand_local_only["$lb"]=true
+    fi
+  done < <(git -C "$repo_root" branch --format='%(refname:short)')
+
+  main_ref="refs/remotes/origin/main"
+else
+  while IFS= read -r lb; do
+    [ -n "$lb" ] && [ "$lb" != main ] || continue
+    candidate_names+=("$lb")
+    cand_ref["$lb"]="refs/heads/$lb"
+    cand_local_only["$lb"]=true
+  done < <(git -C "$repo_root" branch --format='%(refname:short)')
+
+  main_ref="refs/heads/main"
+fi
+
+# Highest-numbered cfq/<NNN>-... branch among all candidates, found before the aheadOfMain filter
+# below so a fully-merged batch branch is never silently dropped — it's always offered as an
+# alternative, per the batch context's "last batch is always offered" rule.
+highest_name=""
+highest_num=-1
+for name in "${candidate_names[@]:-}"; do
+  [ -n "$name" ] || continue
+  case "$name" in cfq/*) ;; *) continue ;; esac
+  num="$(parse_batch_number "${name#cfq/}")"
+  [ -n "$num" ] || continue
+  if [ "$num" -gt "$highest_num" ]; then
+    highest_num="$num"
+    highest_name="$name"
+  fi
+done
+
+cand_jsons=()
+for name in "${candidate_names[@]:-}"; do
+  [ -n "$name" ] || continue
+  ref="${cand_ref[$name]}"
+  local_only="${cand_local_only[$name]}"
+
+  ahead_of_main=0
+  if git -C "$repo_root" rev-parse --verify -q "$ref" >/dev/null 2>&1 \
+    && git -C "$repo_root" rev-parse --verify -q "$main_ref" >/dev/null 2>&1; then
+    ahead_of_main=$(git -C "$repo_root" rev-list --count "$main_ref..$ref" 2>/dev/null || echo 0)
+  fi
+
+  is_highest=false
+  [ "$name" = "$highest_name" ] && is_highest=true
+
+  [ "$ahead_of_main" -gt 0 ] || [ "$is_highest" = true ] || continue
+
+  merged=false
+  if [ "$ahead_of_main" -eq 0 ] \
+    && git -C "$repo_root" rev-parse --verify -q "$main_ref" >/dev/null 2>&1 \
+    && git -C "$repo_root" merge-base --is-ancestor "$ref" "$main_ref" 2>/dev/null; then
+    merged=true
+  fi
+
+  behind_remote=0
+  ahead_remote=0
+  if [ "$local_only" = false ] \
+    && git -C "$repo_root" rev-parse --verify -q "refs/heads/$name" >/dev/null 2>&1; then
+    counts=$(git -C "$repo_root" rev-list --left-right --count "$ref...refs/heads/$name")
+    behind_remote=$(printf '%s' "$counts" | awk '{print $1}')
+    ahead_remote=$(printf '%s' "$counts" | awk '{print $2}')
+  fi
+
+  last_commit=$(git -C "$repo_root" log -1 --format=%cI "$ref")
+  last_epoch=$(git -C "$repo_root" log -1 --format=%ct "$ref")
+
+  cand_jsons+=("$(jq -nc --arg name "$name" --arg ref "$ref" --argjson aheadOfMain "$ahead_of_main" \
+    --argjson behindRemote "$behind_remote" --argjson aheadRemote "$ahead_remote" \
+    --argjson localOnly "$local_only" --argjson highestBatch "$is_highest" \
+    --argjson mergedIntoOriginMain "$merged" --arg lastCommit "$last_commit" --argjson lastEpoch "$last_epoch" \
+    '{name: $name, ref: $ref, aheadOfMain: $aheadOfMain, behindRemote: $behindRemote,
+      aheadRemote: $aheadRemote, localOnly: $localOnly, highestBatch: $highestBatch,
+      mergedIntoOriginMain: $mergedIntoOriginMain, lastCommit: $lastCommit, lastEpoch: $lastEpoch}')")
+done
+
+if [ "${#cand_jsons[@]}" -eq 0 ]; then
+  cand_json='[]'
+else
+  cand_json=$(printf '%s\n' "${cand_jsons[@]}" | jq -s 'sort_by(.lastEpoch) | reverse | map(del(.lastEpoch))')
+fi
+
+if [ "$(printf '%s' "$cand_json" | jq 'length')" -eq 0 ]; then
+  base_json='"main"'
+  base_ref_json=$(jq -n --arg r "$main_ref" '$r')
+else
+  base_json=$(printf '%s' "$cand_json" | jq '.[0].name')
+  base_ref_json=$(printf '%s' "$cand_json" | jq '.[0].ref')
+fi
+
+# Local main ahead of/diverged from origin/main is a real state worth a warning even though it no
+# longer influences candidate selection: `baseRef` points into `refs/remotes/` now, so pulling the
+# local `main` ref forward (or reading it at all) has no remaining purpose here. No mutation
+# happens on this path (unlike the `continue`-mode fast-forward above) — phase 03 turns this
+# warning into a push offer.
 new_warning_json='null'
 if [ "$remote_checked" = true ] && git -C "$repo_root" rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1; then
-  if git -C "$repo_root" merge-base --is-ancestor refs/heads/main refs/remotes/origin/main; then
-    if [ "$(git -C "$repo_root" symbolic-ref -q --short HEAD 2>/dev/null)" != main ]; then
-      git -C "$repo_root" update-ref refs/heads/main refs/remotes/origin/main
-    fi
-  else
+  if ! git -C "$repo_root" merge-base --is-ancestor refs/heads/main refs/remotes/origin/main; then
     ahead_count=$(git -C "$repo_root" rev-list --count refs/remotes/origin/main..refs/heads/main)
-    candidates+=(main)
     new_warning_json=$(jq -n --arg msg \
       "local main is $ahead_count commit(s) ahead of origin/main — resolve before basing new work on it" \
       '$msg')
   fi
 fi
 
-if [ "${#candidates[@]}" -eq 0 ]; then
-  base_json='"main"'
-else
-  base_json='null'
-fi
-cand_json=$(printf '%s\n' "${candidates[@]:-}" | sed '/^$/d' | jq -R . | jq -s .)
-
 jq -n --arg batch "$batch_name" --argjson num "$number_json" --arg branch "$branch" \
-  --argjson base "$base_json" --argjson candidates "$cand_json" \
+  --argjson base "$base_json" --argjson baseRef "$base_ref_json" --argjson candidates "$cand_json" \
   --argjson remoteChecked "$remote_checked" --argjson remoteWarning "$new_warning_json" \
-  '{mode: "new", batch: $batch, batchNumber: $num, branch: $branch, base: $base, candidates: $candidates, remoteChecked: $remoteChecked, remoteWarning: $remoteWarning}'
+  '{mode: "new", batch: $batch, batchNumber: $num, branch: $branch, base: $base, baseRef: $baseRef,
+    candidates: $candidates, remoteChecked: $remoteChecked, remoteWarning: $remoteWarning}'

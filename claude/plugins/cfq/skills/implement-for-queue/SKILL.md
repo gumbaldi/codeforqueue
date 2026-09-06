@@ -99,8 +99,8 @@ adds a line above the existing one:
   **end immediately**, touch nothing, name holder/batch/time, note the 30-minute stale takeover;
   `TAKEOVER` → proceed, `Lock` carries that warning; else `Lock` is just acquired. `branch.mode`
   (from the preflight — already computed, no new call) decides the checkout — full behavior (`off`/`continue`/`new`,
-  base-branch question, checkout, changelog init, post-checkout reconfirm) — now fetch-checked against `origin`
-  first — in `${CLAUDE_PLUGIN_ROOT}/references/queues.md`'s **Branch and Changelog on Go-Ahead**. `Branch` renders whichever
+  base-branch question, checkout, changelog init, post-checkout reconfirm) — based on `origin`'s
+  current state — in `${CLAUDE_PLUGIN_ROOT}/references/queues.md`'s **Branch and Changelog on Go-Ahead**. `Branch` renders whichever
   happened. `resume` (same preflight
   result) already carries done/open phases, last commit, deviations, red-phase history,
   `.batch-context.md`'s path — no new `bin/cfq resume` call; if `resume.batchContext.exists`, `Read`
