@@ -50,17 +50,30 @@ deciding, so a stale local `main`/branch never gets silently proposed as a base.
 `aheadOfMain`, `behindRemote`, `aheadRemote`, `localOnly`, `highestBatch`, `mergedIntoOriginMain`,
 `lastCommit`), ranked by `lastCommit` descending, and `base`/`baseRef` already name the
 recommended one (`base: "main"` / `baseRef` pointing at `origin/main` when `candidates` is empty —
-never `null` waiting on a question). Two additive top-level fields ride along with every response:
-`remoteChecked` (bool) and `remoteWarning` (string or `null`, set only when local `main` — on the
-`new` path — or the persisted branch — on `continue` — has commits `origin` doesn't and that gap
-can't be auto-resolved; it no longer affects candidate selection, it is purely a heads-up).
+never `null` waiting on a question). Every response additionally carries `remoteChecked` (bool),
+`remoteWarning` (string or `null`, set only when the chosen base — local `main` on `new`, the
+persisted branch on `continue` — has commits `origin` doesn't and the gap can't be auto-resolved),
+`remoteState` (`"synced"`/`"ahead"`/`"behind"`/`"diverged"`/`"unknown"` — the chosen base's own
+relationship to its `origin` counterpart, `"unknown"` whenever `remoteChecked` is `false` or no
+comparison was possible), `pushable` (bool, true only for `remoteState: "ahead"`), and `unpushed`
+(array of `"<hash> <subject>"` lines, empty unless `pushable`) — so the caller never has to branch
+on `mode` to read any of the three.
 
 - **`off`** (`branchPerBatch` is `false`) → `Branch: ➖ branchPerBatch off`, skip everything below.
-- **`continue`** (a branch for this batch already exists) → `git checkout "<branch>"`, don't write
-  a changelog entry (the batch is already recorded). Local purely behind its own
-  `origin/<branch>` is fast-forwarded automatically before checkout. `remoteWarning` non-null here
-  (local ahead of/diverged from `origin/<branch>`) doesn't block — `git checkout "<branch>"` still
-  runs, but the `Branch` status line surfaces the warning as a `⚠️` note.
+- **`continue`** (a branch for this batch already exists) → resolve `remoteState` before touching
+  anything. **`behind`**: not checked out → `update-ref` fast-forwards the local ref as before,
+  then `git checkout "<branch>"`. Checked out with a clean tree → `git merge --ff-only
+  "refs/remotes/origin/<branch>"` instead (the ref of the currently-checked-out branch can't move
+  under `update-ref`). Checked out and dirty → nothing moves; `remoteWarning` names the dirty tree,
+  and the `Branch` status line surfaces it as a `⚠️` note — `git checkout "<branch>"` still runs,
+  a dirty tree here is otherwise the same error the **`new`** path already treats it as. **`ahead`**
+  (`pushable: true`) → one `AskUserQuestion` before the checkout: **Push and continue**
+  (recommended) runs `git push origin "<branch>"`, then proceeds; **Continue without pushing**
+  proceeds and names the commits from `unpushed` that won't be in this batch's base; **Cancel**
+  releases the lock and ends the session, nothing touched. **`diverged`** → the same three-option
+  question minus the push option — `remoteWarning` explains why a push would be rejected.
+  **`synced`**/**`unknown`** → plain `git checkout "<branch>"`, no question. Either way, don't write
+  a changelog entry — the batch is already recorded.
 - **`new`** → a genuinely empty `candidates` list resolves silently to `base`/`baseRef` (`main`/
   `origin/main`), no question. Otherwise one `AskUserQuestion` listing every entry in `candidates`
   (already ranked), asking which one the new branch builds on. Recommended (first, labelled

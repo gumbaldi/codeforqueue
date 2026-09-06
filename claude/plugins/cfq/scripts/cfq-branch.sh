@@ -38,6 +38,28 @@ list_remote_branch_names() {
     | sed -n 's#^origin/##p' | grep -v '^HEAD$' || true
 }
 
+# Classifies a bidirectional ahead/behind count pair into the shared remoteState vocabulary --
+# used by both `continue` mode and `new` mode so a caller never has to branch on `mode` to read it.
+classify_remote_state() {
+  local ahead="$1" behind="$2"
+  if [ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ]; then
+    echo diverged
+  elif [ "$ahead" -gt 0 ]; then
+    echo ahead
+  elif [ "$behind" -gt 0 ]; then
+    echo behind
+  else
+    echo synced
+  fi
+}
+
+# "<hash> <subject>" lines for commits reachable from $2 but not $1, as a JSON array -- the shape
+# the push offer in references/queues.md names commits from.
+list_unpushed_commits() {
+  git -C "$repo_root" log --format='%h %s' "$1..$2" 2>/dev/null \
+    | jq -R -s 'split("\n") | map(select(length > 0))'
+}
+
 if [ "$cmd" = "check" ]; then
   branch_name="${3:?$usage}"
 
@@ -142,23 +164,51 @@ fi
 
 if [ -n "$existing" ]; then
   continue_warning_json='null'
+  remote_state="unknown"
+  pushable=false
+  unpushed_json='[]'
+
   if [ "$remote_checked" = true ] \
     && git -C "$repo_root" rev-parse --verify -q "refs/heads/$existing" >/dev/null 2>&1 \
     && git -C "$repo_root" rev-parse --verify -q "refs/remotes/origin/$existing" >/dev/null 2>&1; then
-    if git -C "$repo_root" merge-base --is-ancestor "refs/heads/$existing" "refs/remotes/origin/$existing"; then
-      if [ "$(git -C "$repo_root" symbolic-ref -q --short HEAD 2>/dev/null)" != "$existing" ]; then
-        git -C "$repo_root" update-ref "refs/heads/$existing" "refs/remotes/origin/$existing"
-      fi
-    else
-      ahead_count=$(git -C "$repo_root" rev-list --count "refs/remotes/origin/$existing..refs/heads/$existing")
-      continue_warning_json=$(jq -n --arg msg \
-        "local $existing is $ahead_count commit(s) ahead of/diverged from origin/$existing — resolve before continuing" \
-        '$msg')
-    fi
+    counts=$(git -C "$repo_root" rev-list --left-right --count "refs/remotes/origin/$existing...refs/heads/$existing")
+    behind=$(printf '%s' "$counts" | awk '{print $1}')
+    ahead=$(printf '%s' "$counts" | awk '{print $2}')
+    remote_state=$(classify_remote_state "$ahead" "$behind")
+
+    case "$remote_state" in
+      behind)
+        # `update-ref` can't move the ref of the branch that is currently checked out -- fall back
+        # to a fast-forward merge there, and never mutate anything against a dirty tree.
+        checked_out="$(git -C "$repo_root" symbolic-ref -q --short HEAD 2>/dev/null || true)"
+        if [ "$checked_out" != "$existing" ]; then
+          git -C "$repo_root" update-ref "refs/heads/$existing" "refs/remotes/origin/$existing"
+        elif [ -z "$(git -C "$repo_root" status --porcelain)" ]; then
+          git -C "$repo_root" merge -q --ff-only "refs/remotes/origin/$existing"
+        else
+          continue_warning_json=$(jq -n --arg msg \
+            "local $existing is behind origin/$existing but the working tree is dirty — resolve before continuing" \
+            '$msg')
+        fi
+        ;;
+      ahead)
+        pushable=true
+        unpushed_json=$(list_unpushed_commits "refs/remotes/origin/$existing" "refs/heads/$existing")
+        ;;
+      diverged)
+        continue_warning_json=$(jq -n --arg msg \
+          "local $existing is $ahead commit(s) ahead of and $behind commit(s) behind origin/$existing — a push would be rejected" \
+          '$msg')
+        ;;
+    esac
   fi
+
   jq -n --arg batch "$batch_name" --argjson num "$number_json" --arg branch "$existing" \
     --argjson remoteChecked "$remote_checked" --argjson remoteWarning "$continue_warning_json" \
-    '{mode: "continue", batch: $batch, batchNumber: $num, branch: $branch, base: null, candidates: [], remoteChecked: $remoteChecked, remoteWarning: $remoteWarning}'
+    --arg remoteState "$remote_state" --argjson pushable "$pushable" --argjson unpushed "$unpushed_json" \
+    '{mode: "continue", batch: $batch, batchNumber: $num, branch: $branch, base: null, candidates: [],
+      remoteChecked: $remoteChecked, remoteWarning: $remoteWarning, remoteState: $remoteState,
+      pushable: $pushable, unpushed: $unpushed}'
   exit 0
 fi
 
@@ -270,28 +320,61 @@ fi
 if [ "$(printf '%s' "$cand_json" | jq 'length')" -eq 0 ]; then
   base_json='"main"'
   base_ref_json=$(jq -n --arg r "$main_ref" '$r')
+  base_name="main"
+  base_local_only=false
 else
   base_json=$(printf '%s' "$cand_json" | jq '.[0].name')
   base_ref_json=$(printf '%s' "$cand_json" | jq '.[0].ref')
+  base_name=$(printf '%s' "$cand_json" | jq -r '.[0].name')
+  base_local_only=$(printf '%s' "$cand_json" | jq -r '.[0].localOnly')
 fi
+base_local_ref="refs/heads/$base_name"
+base_origin_ref="refs/remotes/origin/$base_name"
 
-# Local main ahead of/diverged from origin/main is a real state worth a warning even though it no
-# longer influences candidate selection: `baseRef` points into `refs/remotes/` now, so pulling the
-# local `main` ref forward (or reading it at all) has no remaining purpose here. No mutation
-# happens on this path (unlike the `continue`-mode fast-forward above) — phase 03 turns this
-# warning into a push offer.
+# remoteState/pushable/unpushed for the *chosen* base -- same vocabulary and helpers as `continue`
+# mode, so a caller never has to branch on `mode` to read them. Local main ahead of/diverged from
+# origin/main (or a candidate ahead of/diverged from its own origin counterpart) no longer
+# influences candidate selection -- `baseRef` already points into `refs/remotes/` -- but is still a
+# real state worth a push offer, which `references/queues.md` turns `remoteWarning` into.
+remote_state="unknown"
+pushable=false
+unpushed_json='[]'
 new_warning_json='null'
-if [ "$remote_checked" = true ] && git -C "$repo_root" rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1; then
-  if ! git -C "$repo_root" merge-base --is-ancestor refs/heads/main refs/remotes/origin/main; then
-    ahead_count=$(git -C "$repo_root" rev-list --count refs/remotes/origin/main..refs/heads/main)
-    new_warning_json=$(jq -n --arg msg \
-      "local main is $ahead_count commit(s) ahead of origin/main — resolve before basing new work on it" \
-      '$msg')
+if [ "$remote_checked" = true ]; then
+  if [ "$base_local_only" = true ]; then
+    if git -C "$repo_root" rev-parse --verify -q "$base_local_ref" >/dev/null 2>&1; then
+      remote_state="ahead"
+      pushable=true
+      unpushed_json=$(git -C "$repo_root" log --format='%h %s' "$base_local_ref" 2>/dev/null \
+        | jq -R -s 'split("\n") | map(select(length > 0))')
+    fi
+  elif git -C "$repo_root" rev-parse --verify -q "$base_local_ref" >/dev/null 2>&1 \
+    && git -C "$repo_root" rev-parse --verify -q "$base_origin_ref" >/dev/null 2>&1; then
+    counts=$(git -C "$repo_root" rev-list --left-right --count "$base_origin_ref...$base_local_ref")
+    behind=$(printf '%s' "$counts" | awk '{print $1}')
+    ahead=$(printf '%s' "$counts" | awk '{print $2}')
+    remote_state=$(classify_remote_state "$ahead" "$behind")
+    case "$remote_state" in
+      ahead)
+        pushable=true
+        unpushed_json=$(list_unpushed_commits "$base_origin_ref" "$base_local_ref")
+        new_warning_json=$(jq -n --arg msg \
+          "local $base_name is $ahead commit(s) ahead of origin/$base_name — a push before continuing would include them" \
+          '$msg')
+        ;;
+      diverged)
+        new_warning_json=$(jq -n --arg msg \
+          "local $base_name has diverged from origin/$base_name — resolve before basing new work on it" \
+          '$msg')
+        ;;
+    esac
   fi
 fi
 
 jq -n --arg batch "$batch_name" --argjson num "$number_json" --arg branch "$branch" \
   --argjson base "$base_json" --argjson baseRef "$base_ref_json" --argjson candidates "$cand_json" \
   --argjson remoteChecked "$remote_checked" --argjson remoteWarning "$new_warning_json" \
+  --arg remoteState "$remote_state" --argjson pushable "$pushable" --argjson unpushed "$unpushed_json" \
   '{mode: "new", batch: $batch, batchNumber: $num, branch: $branch, base: $base, baseRef: $baseRef,
-    candidates: $candidates, remoteChecked: $remoteChecked, remoteWarning: $remoteWarning}'
+    candidates: $candidates, remoteChecked: $remoteChecked, remoteWarning: $remoteWarning,
+    remoteState: $remoteState, pushable: $pushable, unpushed: $unpushed}'

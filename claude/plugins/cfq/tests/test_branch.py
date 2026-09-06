@@ -64,6 +64,10 @@ class BranchTest(CfqTestCase):
         out = self.json_out(self._plan("2026-01-01-mytopic"))
         self.assertEqual(out["mode"], "continue", msg=f"continue mode -> {out}")
         self.assertEqual(out["branch"], "v0.3-mytopic", msg=f"continue branch -> {out}")
+        # No origin at all -> offline, remoteState falls back to "unknown".
+        self.assertEqual(out["remoteState"], "unknown", msg=f"offline remoteState -> {out}")
+        self.assertFalse(out["pushable"], msg=f"offline pushable -> {out}")
+        self.assertEqual(out["unpushed"], [], msg=f"offline unpushed -> {out}")
 
     def test_remote_only_branch_continues(self):
         # Remote-only branch for the slug -> same continue result.
@@ -250,6 +254,7 @@ class BranchTest(CfqTestCase):
         self.assertEqual(out["branch"], "cfq/2026-03-04-conttopic", msg=f"cont branch -> {out}")
         self.assertEqual(out["remoteChecked"], True, msg=f"cont remoteChecked -> {out}")
         self.assertIsNone(out["remoteWarning"], msg=f"cont remoteWarning -> {out}")
+        self.assertEqual(out["remoteState"], "behind", msg=f"cont remoteState -> {out}")
         local = self.run_clean(
             "git", "rev-parse", "refs/heads/cfq/2026-03-04-conttopic", cwd=cont_repo
         ).stdout.strip()
@@ -257,6 +262,122 @@ class BranchTest(CfqTestCase):
             "git", "rev-parse", "refs/remotes/origin/cfq/2026-03-04-conttopic", cwd=cont_repo
         ).stdout.strip()
         self.assertEqual(local, remote, msg="local continue branch was not fast-forwarded")
+
+    def _make_continue_repo(self, batch, branch_name):
+        """origin + a persisted `branch_name` for `batch`, returns (repo, remote)."""
+        repo = self._repos_dir / f"{batch}-repo"
+        repo.mkdir()
+        self.run_clean("git", "init", "-q", "-b", "main", cwd=repo)
+        self.run_clean(
+            "git", "-c", "user.email=a@b.c", "-c", "user.name=a",
+            "commit", "--allow-empty", "-q", "-m", "init", cwd=repo,
+        )
+        remote = self._repos_dir / f"{batch}-remote.git"
+        self.run_clean("git", "init", "-q", "--bare", "-b", "main", str(remote))
+        self.run_clean("git", "remote", "add", "origin", str(remote), cwd=repo)
+        self.run_cfq(
+            "changelog", "init", str(repo), branch_name, "main", batch, check=True,
+        )
+        # Mirrors the real flow: by the time `/ifq` reaches `branch plan`, `cfq-lock.sh` has
+        # already run `layout ensure`, so the queue's own untracked state is Git-excluded and
+        # never shows up as a dirty tree on its own.
+        self.run_cfq("layout", "ensure", str(repo), check=True)
+        self.run_clean("git", "branch", branch_name, cwd=repo)
+        self.run_clean("git", "push", "-q", "origin", "main", branch_name, cwd=repo)
+        return repo, remote
+
+    def test_continue_behind_checked_out(self):
+        # (behind, checked out, clean) -> fast-forward via `merge --ff-only` since `update-ref`
+        # cannot move the ref of the branch that is currently HEAD.
+        batch = "2026-03-05-checkedout"
+        branch_name = f"cfq/{batch}"
+        repo, remote = self._make_continue_repo(batch, branch_name)
+        self.run_clean("git", "checkout", "-q", branch_name, cwd=repo)
+        clone = self._repos_dir / "checkedout-clone"
+        self.run_clean("git", "clone", "-q", str(remote), str(clone))
+        self.run_clean("git", "checkout", "-q", branch_name, cwd=clone)
+        self.run_clean(
+            "git", "-c", "user.email=a@b.c", "-c", "user.name=a",
+            "commit", "--allow-empty", "-q", "-m", "remote-ahead", cwd=clone,
+        )
+        self.run_clean("git", "push", "-q", "origin", branch_name, cwd=clone)
+
+        out = self.json_out(self._plan(batch, repo=repo))
+        self.assertEqual(out["mode"], "continue", msg=f"checked-out behind mode -> {out}")
+        self.assertEqual(out["remoteState"], "behind", msg=f"checked-out behind remoteState -> {out}")
+        self.assertIsNone(out["remoteWarning"], msg=f"checked-out behind remoteWarning -> {out}")
+        head = self.run_clean("git", "rev-parse", "HEAD", cwd=repo).stdout.strip()
+        origin_ref = self.run_clean(
+            "git", "rev-parse", f"refs/remotes/origin/{branch_name}", cwd=repo
+        ).stdout.strip()
+        self.assertEqual(head, origin_ref, msg="checked-out behind branch was not fast-forwarded")
+
+    def test_continue_behind_checked_out_dirty(self):
+        # (behind, checked out, dirty) -> nothing moves, remoteWarning names the dirty tree.
+        batch = "2026-03-06-dirtycheckedout"
+        branch_name = f"cfq/{batch}"
+        repo, remote = self._make_continue_repo(batch, branch_name)
+        self.run_clean("git", "checkout", "-q", branch_name, cwd=repo)
+        clone = self._repos_dir / "dirty-clone"
+        self.run_clean("git", "clone", "-q", str(remote), str(clone))
+        self.run_clean("git", "checkout", "-q", branch_name, cwd=clone)
+        self.run_clean(
+            "git", "-c", "user.email=a@b.c", "-c", "user.name=a",
+            "commit", "--allow-empty", "-q", "-m", "remote-ahead", cwd=clone,
+        )
+        self.run_clean("git", "push", "-q", "origin", branch_name, cwd=clone)
+        (repo / "dirty.txt").write_text("uncommitted\n")
+
+        before_head = self.run_clean("git", "rev-parse", "HEAD", cwd=repo).stdout.strip()
+        out = self.json_out(self._plan(batch, repo=repo))
+        self.assertEqual(out["mode"], "continue", msg=f"dirty checked-out mode -> {out}")
+        self.assertIsNotNone(out["remoteWarning"], msg=f"dirty checked-out remoteWarning -> {out}")
+        after_head = self.run_clean("git", "rev-parse", "HEAD", cwd=repo).stdout.strip()
+        self.assertEqual(before_head, after_head, msg="dirty checked-out branch ref must not move")
+
+    def test_continue_ahead(self):
+        # (ahead) -> remoteState "ahead", pushable, unpushed lists hash + subject.
+        batch = "2026-03-07-ahead"
+        branch_name = f"cfq/{batch}"
+        repo, _remote = self._make_continue_repo(batch, branch_name)
+        self.run_clean("git", "checkout", "-q", branch_name, cwd=repo)
+        self.run_clean(
+            "git", "-c", "user.email=a@b.c", "-c", "user.name=a",
+            "commit", "--allow-empty", "-q", "-m", "unpushed change", cwd=repo,
+        )
+        self.run_clean("git", "checkout", "-q", "main", cwd=repo)
+
+        out = self.json_out(self._plan(batch, repo=repo))
+        self.assertEqual(out["remoteState"], "ahead", msg=f"ahead remoteState -> {out}")
+        self.assertTrue(out["pushable"], msg=f"ahead pushable -> {out}")
+        self.assertEqual(len(out["unpushed"]), 1, msg=f"ahead unpushed -> {out}")
+        self.assertIn("unpushed change", out["unpushed"][0], msg=f"ahead unpushed content -> {out}")
+
+    def test_continue_diverged(self):
+        # (diverged) -> remoteState "diverged", not pushable, warning names both counts.
+        batch = "2026-03-08-diverged"
+        branch_name = f"cfq/{batch}"
+        repo, remote = self._make_continue_repo(batch, branch_name)
+        clone = self._repos_dir / "diverged-clone"
+        self.run_clean("git", "clone", "-q", str(remote), str(clone))
+        self.run_clean("git", "checkout", "-q", branch_name, cwd=clone)
+        self.run_clean(
+            "git", "-c", "user.email=a@b.c", "-c", "user.name=a",
+            "commit", "--allow-empty", "-q", "-m", "remote-side", cwd=clone,
+        )
+        self.run_clean("git", "push", "-q", "origin", branch_name, cwd=clone)
+
+        self.run_clean("git", "checkout", "-q", branch_name, cwd=repo)
+        self.run_clean(
+            "git", "-c", "user.email=a@b.c", "-c", "user.name=a",
+            "commit", "--allow-empty", "-q", "-m", "local-side", cwd=repo,
+        )
+        self.run_clean("git", "checkout", "-q", "main", cwd=repo)
+
+        out = self.json_out(self._plan(batch, repo=repo))
+        self.assertEqual(out["remoteState"], "diverged", msg=f"diverged remoteState -> {out}")
+        self.assertFalse(out["pushable"], msg=f"diverged pushable -> {out}")
+        self.assertIsNotNone(out["remoteWarning"], msg=f"diverged remoteWarning -> {out}")
 
     def test_offline_candidates_from_local_branches(self):
         # Offline (no origin) -> candidates fall back to local `git branch`, every one
