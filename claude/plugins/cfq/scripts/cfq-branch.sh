@@ -3,18 +3,98 @@
 # never creates or checks out a branch itself; the caller acts on `mode`. New branches use the
 # batch's own stable directory name directly (`cfq/<batch-directory-name>`) — no version scanning,
 # no pseudo-version increment, no identity derived from Git branch history.
+# `check` resolves and judges one named branch (for a free-text base-branch answer) — also
+# read-only, no dispatcher entry of its own since `branch` is already the noun.
 # Usage: cfq-branch.sh plan <repo-root> <batch-dir-name>
+#        cfq-branch.sh check <repo-root> <branch-name>
 set -eu
 
 command -v jq >/dev/null 2>&1 || { echo "cfq-branch.sh: jq is required" >&2; exit 1; }
 
-cmd="${1:?usage: cfq-branch.sh plan <repo-root> <batch-dir-name>}"
-repo_root="${2:?usage: cfq-branch.sh plan <repo-root> <batch-dir-name>}"
-batch_name="${3:?usage: cfq-branch.sh plan <repo-root> <batch-dir-name>}"
-[ "$cmd" = "plan" ] || { echo "cfq-branch.sh: unknown command '$cmd'" >&2; exit 1; }
+usage="usage: cfq-branch.sh plan <repo-root> <batch-dir-name> | cfq-branch.sh check <repo-root> <branch-name>"
+cmd="${1:?$usage}"
+repo_root="${2:?$usage}"
+case "$cmd" in
+  plan|check) ;;
+  *) echo "cfq-branch.sh: unknown command '$cmd'" >&2; exit 1 ;;
+esac
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cfq="$script_dir/../bin/cfq"
+
+# Best-effort remote check: no origin, or fetch fails (offline/sandboxed) -> remote_checked stays
+# false and every path below behaves exactly as before this was added. Shared by both verbs.
+remote_checked=false
+if git -C "$repo_root" remote get-url origin >/dev/null 2>&1 \
+  && git -C "$repo_root" fetch -q origin >/dev/null 2>&1; then
+  remote_checked=true
+fi
+
+if [ "$cmd" = "check" ]; then
+  branch_name="${3:?$usage}"
+
+  origin_ref="refs/remotes/origin/$branch_name"
+  local_ref="refs/heads/$branch_name"
+  origin_exists=false
+  local_exists=false
+  git -C "$repo_root" rev-parse --verify -q "$origin_ref" >/dev/null 2>&1 && origin_exists=true
+  git -C "$repo_root" rev-parse --verify -q "$local_ref" >/dev/null 2>&1 && local_exists=true
+
+  if [ "$origin_exists" = false ] && [ "$local_exists" = false ]; then
+    jq -n --arg name "$branch_name" --argjson remoteChecked "$remote_checked" \
+      '{status: "UNRESOLVED", name: $name, ref: null, remoteChecked: $remoteChecked}'
+    exit 0
+  fi
+
+  if [ "$origin_exists" = true ]; then
+    ref="$origin_ref"
+    local_only=false
+  else
+    ref="$local_ref"
+    local_only=true
+  fi
+
+  ahead=0
+  behind=0
+  if [ "$origin_exists" = true ] && [ "$local_exists" = true ]; then
+    counts=$(git -C "$repo_root" rev-list --left-right --count "$origin_ref...$local_ref")
+    behind=$(printf '%s' "$counts" | awk '{print $1}')
+    ahead=$(printf '%s' "$counts" | awk '{print $2}')
+  fi
+
+  last_commit=$(git -C "$repo_root" log -1 --format=%cI "$ref")
+  ref_epoch=$(git -C "$repo_root" log -1 --format=%ct "$ref")
+
+  # Same "newest commit wins" rule the `new`-mode candidate list below applies — phase 02 extracts
+  # this into a shared function both paths call.
+  newer_name=""
+  newer_epoch=0
+  while IFS= read -r rb; do
+    [ -n "$rb" ] && [ "$rb" != "origin/HEAD" ] || continue
+    epoch=$(git -C "$repo_root" log -1 --format=%ct "refs/remotes/$rb" 2>/dev/null) || continue
+    if [ "$epoch" -gt "$ref_epoch" ] && [ "$epoch" -gt "$newer_epoch" ]; then
+      newer_epoch="$epoch"
+      newer_name="${rb#origin/}"
+    fi
+  done < <(git -C "$repo_root" branch -r --format='%(refname:short)' 2>/dev/null)
+
+  newer_candidate_json='null'
+  if [ -n "$newer_name" ]; then
+    newer_iso=$(git -C "$repo_root" log -1 --format=%cI "refs/remotes/origin/$newer_name")
+    newer_candidate_json=$(jq -n --arg name "$newer_name" --arg lastCommit "$newer_iso" \
+      '{name: $name, lastCommit: $lastCommit}')
+  fi
+
+  jq -n --arg name "$branch_name" --arg ref "$ref" --argjson localOnly "$local_only" \
+    --argjson ahead "$ahead" --argjson behind "$behind" --arg lastCommit "$last_commit" \
+    --argjson newerCandidate "$newer_candidate_json" --argjson remoteChecked "$remote_checked" \
+    '{status: "OK", name: $name, ref: $ref, localOnly: $localOnly, ahead: $ahead, behind: $behind,
+      lastCommit: $lastCommit, newerCandidate: $newerCandidate, remoteChecked: $remoteChecked}'
+  exit 0
+fi
+
+# --- plan ---
+batch_name="${3:?$usage}"
 
 # New-format batch directory names are <digits>-<YYYY-MM-DD>-<slug> (the number precedes the
 # date); legacy names start directly with the date. Prints the plain integer (no leading zeros) on
@@ -34,14 +114,6 @@ if [ "$branch_per_batch" = "false" ]; then
   jq -n --arg batch "$batch_name" --argjson num "$number_json" \
     '{mode: "off", batch: $batch, batchNumber: $num, branch: null, base: null, candidates: [], remoteChecked: false, remoteWarning: null}'
   exit 0
-fi
-
-# Best-effort remote check: no origin, or fetch fails (offline/sandboxed) -> remote_checked stays
-# false and every path below behaves exactly as before this was added.
-remote_checked=false
-if git -C "$repo_root" remote get-url origin >/dev/null 2>&1 \
-  && git -C "$repo_root" fetch -q origin >/dev/null 2>&1; then
-  remote_checked=true
 fi
 
 # Prefer the branch already persisted in the CFQ changelog for this exact batch — authoritative,

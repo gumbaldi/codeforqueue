@@ -251,5 +251,133 @@ class BranchTest(CfqTestCase):
         self.assertEqual(local, remote, msg="local continue branch was not fast-forwarded")
 
 
+class BranchCheckTest(CfqTestCase):
+    def setUp(self):
+        super().setUp()
+        self.repo = self._repos_dir / "repo"
+        self.repo.mkdir()
+        self.run_clean("git", "init", "-q", "-b", "main", cwd=self.repo)
+        self.run_clean(
+            "git", "-c", "user.email=a@b.c", "-c", "user.name=a",
+            "commit", "--allow-empty", "-q", "-m", "init", cwd=self.repo,
+        )
+
+    def _check(self, name, repo=None):
+        return self.run_cfq("branch", "check", str(repo or self.repo), name, check=True)
+
+    def _add_origin(self, repo=None):
+        repo = repo or self.repo
+        remote = self._repos_dir / f"{repo.name}-remote.git"
+        self.run_clean("git", "init", "-q", "--bare", "-b", "main", str(remote))
+        self.run_clean("git", "remote", "add", "origin", str(remote), cwd=repo)
+        self.run_clean("git", "push", "-q", "origin", "main", cwd=repo)
+        return remote
+
+    def _commit(self, repo=None, msg="commit", date=None):
+        env = {"GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date} if date else None
+        self.run_clean(
+            "git", "-c", "user.email=a@b.c", "-c", "user.name=a",
+            "commit", "--allow-empty", "-q", "-m", msg, cwd=repo or self.repo, env=env,
+        )
+
+    def test_routine_same_commit(self):
+        # origin/feature and local feature at the same commit -> OK, ref is the origin ref,
+        # ahead/behind both 0.
+        self._add_origin()
+        self.run_clean("git", "checkout", "-q", "-b", "feature", cwd=self.repo)
+        self.run_clean("git", "push", "-q", "-u", "origin", "feature", cwd=self.repo)
+        out = self.json_out(self._check("feature"))
+        self.assertEqual(out["status"], "OK", msg=f"routine status -> {out}")
+        self.assertEqual(out["ref"], "refs/remotes/origin/feature", msg=f"routine ref -> {out}")
+        self.assertEqual(out["behind"], 0, msg=f"routine behind -> {out}")
+        self.assertEqual(out["ahead"], 0, msg=f"routine ahead -> {out}")
+        self.assertFalse(out["localOnly"], msg=f"routine localOnly -> {out}")
+
+    def test_remote_only_resolves_through_origin(self):
+        # Branch pushed, local ref deleted -> resolves through origin/, localOnly false.
+        self._add_origin()
+        self.run_clean("git", "checkout", "-q", "-b", "feature", cwd=self.repo)
+        self.run_clean("git", "push", "-q", "-u", "origin", "feature", cwd=self.repo)
+        self.run_clean("git", "checkout", "-q", "main", cwd=self.repo)
+        self.run_clean("git", "branch", "-q", "-D", "feature", cwd=self.repo)
+        out = self.json_out(self._check("feature"))
+        self.assertEqual(out["status"], "OK", msg=f"remote-only status -> {out}")
+        self.assertFalse(out["localOnly"], msg=f"remote-only localOnly -> {out}")
+        self.assertEqual(out["ref"], "refs/remotes/origin/feature", msg=f"remote-only ref -> {out}")
+
+    def test_local_only_never_pushed(self):
+        # Branch created locally, never pushed -> localOnly true, ref is the local ref.
+        self.run_clean("git", "branch", "feature", cwd=self.repo)
+        out = self.json_out(self._check("feature"))
+        self.assertEqual(out["status"], "OK", msg=f"local-only status -> {out}")
+        self.assertTrue(out["localOnly"], msg=f"local-only localOnly -> {out}")
+        self.assertEqual(out["ref"], "refs/heads/feature", msg=f"local-only ref -> {out}")
+
+    def test_behind_origin(self):
+        # Local reset one commit back from origin/<name> -> behind 1, ahead 0.
+        self._add_origin()
+        self.run_clean("git", "checkout", "-q", "-b", "feature", cwd=self.repo)
+        self._commit(msg="ahead-on-remote")
+        self.run_clean("git", "push", "-q", "-u", "origin", "feature", cwd=self.repo)
+        self.run_clean("git", "reset", "-q", "--hard", "HEAD~1", cwd=self.repo)
+        out = self.json_out(self._check("feature"))
+        self.assertEqual(out["behind"], 1, msg=f"behind -> {out}")
+        self.assertEqual(out["ahead"], 0, msg=f"behind-case ahead -> {out}")
+
+    def test_ahead_of_origin(self):
+        # One local commit not pushed -> ahead 1, behind 0.
+        self._add_origin()
+        self.run_clean("git", "checkout", "-q", "-b", "feature", cwd=self.repo)
+        self.run_clean("git", "push", "-q", "-u", "origin", "feature", cwd=self.repo)
+        self._commit(msg="unpushed")
+        out = self.json_out(self._check("feature"))
+        self.assertEqual(out["ahead"], 1, msg=f"ahead -> {out}")
+        self.assertEqual(out["behind"], 0, msg=f"ahead-case behind -> {out}")
+
+    def test_diverged(self):
+        # One local and one remote commit from a common base -> ahead 1, behind 1.
+        self._add_origin()
+        self.run_clean("git", "checkout", "-q", "-b", "feature", cwd=self.repo)
+        self.run_clean("git", "push", "-q", "-u", "origin", "feature", cwd=self.repo)
+        clone = self._repos_dir / "clone"
+        self.run_clean("git", "clone", "-q", str(self._repos_dir / f"{self.repo.name}-remote.git"), str(clone))
+        self.run_clean("git", "checkout", "-q", "feature", cwd=clone)
+        self._commit(repo=clone, msg="remote-side")
+        self.run_clean("git", "push", "-q", "origin", "feature", cwd=clone)
+        self._commit(msg="local-side")
+        out = self.json_out(self._check("feature"))
+        self.assertEqual(out["ahead"], 1, msg=f"diverged ahead -> {out}")
+        self.assertEqual(out["behind"], 1, msg=f"diverged behind -> {out}")
+
+    def test_newer_candidate_reported(self):
+        # A second branch with a later committer date is reported as newerCandidate.
+        self._add_origin()
+        self.run_clean("git", "checkout", "-q", "-b", "feature", cwd=self.repo)
+        self.run_clean("git", "push", "-q", "-u", "origin", "feature", cwd=self.repo)
+        self.run_clean("git", "checkout", "-q", "-b", "newer-topic", "main", cwd=self.repo)
+        self._commit(msg="newer", date="2030-01-01T00:00:00")
+        self.run_clean("git", "push", "-q", "-u", "origin", "newer-topic", cwd=self.repo)
+        out = self.json_out(self._check("feature"))
+        self.assertIsNotNone(out["newerCandidate"], msg=f"newerCandidate -> {out}")
+        self.assertEqual(out["newerCandidate"]["name"], "newer-topic", msg=f"newerCandidate name -> {out}")
+        self.assertTrue(out["newerCandidate"]["lastCommit"], msg=f"newerCandidate lastCommit -> {out}")
+
+    def test_unknown_name_unresolved(self):
+        # A name that exists nowhere -> UNRESOLVED, exit 0, ref null.
+        proc = self._check("does-not-exist")
+        self.assertEqual(proc.returncode, 0, msg=f"unresolved exit code -> {proc}")
+        out = self.json_out(proc)
+        self.assertEqual(out["status"], "UNRESOLVED", msg=f"unresolved status -> {out}")
+        self.assertIsNone(out["ref"], msg=f"unresolved ref -> {out}")
+
+    def test_offline_no_origin(self):
+        # No origin at all -> OK, remoteChecked false, local ref used.
+        self.run_clean("git", "branch", "feature", cwd=self.repo)
+        out = self.json_out(self._check("feature"))
+        self.assertEqual(out["status"], "OK", msg=f"offline status -> {out}")
+        self.assertFalse(out["remoteChecked"], msg=f"offline remoteChecked -> {out}")
+        self.assertEqual(out["ref"], "refs/heads/feature", msg=f"offline ref -> {out}")
+
+
 if __name__ == "__main__":
     unittest.main()
