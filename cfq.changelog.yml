@@ -571,5 +571,16 @@
   branch: cfq/016-2026-09-06-cfq-dashboard-focus-and-affordances
   base: cfq/015-2026-09-06-ifq-remote-base-and-go-gate
   started: 2026-09-07
-  status: in-progress
+  status: done
   legacy: false
+  finished: 2026-09-07
+  phases:
+    - phase: "01-scan-next-batch-resolver"
+      status: "green"
+      summary: "Moved the /ifq selection ranking into bin/cfq scan --format=next; cfq-ifq-preflight.sh now consumes it instead of re-deriving the decision."
+    - phase: "02-dash-open-batches-and-expanded-phases"
+      status: "green"
+      summary: ""
+    - phase: "03-dash-next-and-actions-sections"
+      status: "green"
+      summary: "Moved the cd/model/ifq handoff into its own NEXT section (current repo first, always last), added an ACTIONS section listing every Step C/D capability with a drift guard against dashboard.md, and made the plugins line unambiguous: mode: off vanishes instead of printing a false-alarm-looking clause, and the ponytail audit switch now reads maintenance audit: on/off instead of the ambiguous audit on/off."
