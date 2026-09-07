@@ -52,15 +52,15 @@ computed once by the aggregator, no separate call.
 
 - Neither installed → `➖ mattpocock-skills/ponytail not installed`.
 - Both installed, at least one switch off → `➖ installed · <off list>`, naming only the switch(es)
-  that are actually off (`grill: classic off`, `audit off`).
-- Both installed, both on → `✅ mattpocock-skills and ponytail installed · classic grill and audit
-  on`.
+  that are actually off (`grill: classic off`, `maintenance audit: off`).
+- Both installed, both on → `✅ mattpocock-skills and ponytail installed · classic grill on ·
+  maintenance audit: on`.
 - One installed, one missing → name the missing one and the installed one's switch state, e.g.
   `➖ ponytail not installed · classic grill on`.
-- Ponytail installed and `.ponytailMode` is not `off` → append `· mode: <mode> · cfq expects off`
-  and force the icon to `⚠️`, regardless of which of the four cases above applies — cfq expects
-  ponytail dormant outside the maintenance audit. `.ponytailMode == "off"` → append `· mode: off`
-  with no icon change, no warning.
+- Ponytail installed and `.ponytailMode` is not `off` → append `· ponytail default mode: <mode> ·
+  cfq expects off` and force the icon to `⚠️`, regardless of which of the four cases above
+  applies — cfq expects ponytail dormant outside the maintenance audit. `.ponytailMode == "off"` →
+  no clause appended, no icon change, no warning — `off` is the expected, configured state.
 
 ## Step A — First-Time Setup (only if `setupDone` is `false`)
 
@@ -100,14 +100,16 @@ step didn't run at all.
 "${CLAUDE_PLUGIN_ROOT}/bin/cfq" dash render
 ```
 
-Print its output exactly as returned — the `PRECHECKS` header, `Dash`/`Plugins` status lines,
-`QUEUES`, `THIS REPO · <name>` (when applicable, open batches only, plus the expanded next batch),
-the copyable `cd`/`/model`/`/ifq` sequence, and `CONFIG · <name>` are all already rendered. No
-reformatting, no rebuilding a table from `.repos`/
-`.thisRepo`/`.settings` by hand — this is the same aggregation Step 0 fetches as JSON, formatted by
-the script instead of the model. (The bare `/cfq` slash command already prints this block via its
-own injection before the model runs at all; this step exists for every other way the skill gets
-invoked — natural language, or as part of Step A's flow.)
+Print its output exactly as returned, in the order the script emits it — `PRECHECKS` header,
+`Dash`/`Plugins` status lines, `QUEUES`, `THIS REPO · <name>` (when applicable, open batches only,
+plus the expanded next batch), `CONFIG · <name>`, `ACTIONS` (every management action and settings
+command Step C/D can run, naming each in one line), and finally `NEXT` — the copyable
+`cd`/`/model`/`/ifq` sequence, current repo first when several repos have open work, state
+described before the call to action that follows it. No reformatting, no rebuilding a table from
+`.repos`/`.thisRepo`/`.settings` by hand — this is the same aggregation Step 0 fetches as JSON,
+formatted by the script instead of the model. (The bare `/cfq` slash command already prints this
+block via its own injection before the model runs at all; this step exists for every other way the
+skill gets invoked — natural language, or as part of Step A's flow.)
 
 The dashboard never executes `todo/` `check:` commands — that stays Step C's job, on request.
 

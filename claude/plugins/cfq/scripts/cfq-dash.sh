@@ -173,17 +173,15 @@ dash_line=$(jq -rn --arg status "$status" --argjson repos "$repos_json" --argjso
 plugins_line=$(jq -rn --argjson p "$plugins_obj" '
   $p as $p
   | (if $p.ponytail and $p.ponytailMode != "off" then
-       "mode: " + $p.ponytailMode + " · cfq expects off"
-     elif $p.ponytail then
-       "mode: off"
+       "ponytail default mode: " + $p.ponytailMode + " · cfq expects off"
      else null end) as $modeClause
   | (if ($p.mattpocock == false) and ($p.ponytail == false) then
       {icon:"➖", text:"mattpocock-skills/ponytail not installed"}
     elif ($p.mattpocock == true) and ($p.ponytail == true) then
       ([ (if $p.useMattpocockGrilling then empty else "grill: classic off" end),
-         (if $p.usePonytailAudit then empty else "audit off" end) ]) as $off
+         (if $p.usePonytailAudit then empty else "maintenance audit: off" end) ]) as $off
       | if ($off | length) == 0 then
-          {icon:"✅", text:"mattpocock-skills and ponytail installed · classic grill and audit on"}
+          {icon:"✅", text:"mattpocock-skills and ponytail installed · classic grill on · maintenance audit: on"}
         else
           {icon:"➖", text: ("installed · " + ($off | join(", ")))}
         end
@@ -191,12 +189,12 @@ plugins_line=$(jq -rn --argjson p "$plugins_obj" '
       (if $p.mattpocock then
          {missing: "ponytail", state: (if $p.useMattpocockGrilling then "classic grill on" else "classic grill off" end)}
        else
-         {missing: "mattpocock-skills", state: (if $p.usePonytailAudit then "audit on" else "audit off" end)}
+         {missing: "mattpocock-skills", state: (if $p.usePonytailAudit then "maintenance audit: on" else "maintenance audit: off" end)}
        end) as $m
       | {icon:"➖", text: ($m.missing + " not installed · " + $m.state)}
     end) as $base
   | (if $modeClause == null then $base.text else $base.text + " · " + $modeClause end) as $text
-  | (if $modeClause != null and $p.ponytail and $p.ponytailMode != "off" then "⚠️" else $base.icon end) as $icon
+  | (if $modeClause != null then "⚠️" else $base.icon end) as $icon
   | $icon + "\t" + $text
 '
 )
@@ -239,8 +237,6 @@ jq -rn --argjson repos "$repos_json" --argjson thisRepo "$this_repo_json" --argj
       | $table + $summary + $expansion
     end
   )
-  + [ $repos[] | select(.status != "BLOCKED" and .open > 0)
-      | "\ncd " + .path + "\n/model " + implModel + "\n/ifq" ]
   + ( if $thisRepo == null then [] else
       ([ $settings[] | select(.marker != "D") ]) as $rows
       | ["", ("CONFIG · " + $thisRepo.name),
@@ -251,8 +247,35 @@ jq -rn --argjson repos "$repos_json" --argjson thisRepo "$this_repo_json" --argj
                  "\n   └ ⚠ masks " + .maskedSource + " value `" + (.maskedValue|tostring) + "`"
                else "" end) ]
         end)
-      + ["Full list: bin/cfq settings list --repo " + $thisRepo.path + " --sources · Global view: bin/cfq settings list --sources"]
     end
   )
+  + ( if $thisRepo == null then [] else
+      def pad27: . + (" " * (27 - length));
+      [
+        ["flag / unflag priority", "mark a batch high priority"],
+        ["delete a batch", "removes the queue directory"],
+        ["archive a batch", "moves it to impl/done/"],
+        ["clean the registry", "drop repos that no longer exist"],
+        ["set / remove a dependency", ".dependsOn between batches"],
+        ["work off todo/ entries", "runs their check: commands"],
+        ["change a setting", "just say it in plain language"],
+        ["full batch list", "bin/cfq dash render --all"],
+        ["settings, this repo", "bin/cfq settings list --repo " + $thisRepo.path + " --sources"],
+        ["settings, global", "bin/cfq settings list --sources"]
+      ] as $actionRows
+      | ["", "ACTIONS"] + [ $actionRows[] | (.[0] | pad27) + .[1] ]
+    end
+  )
+  + (
+      ( [ $repos[] | select(.status != "BLOCKED" and .open > 0) ] ) as $eligible
+      | if ($eligible | length) == 0 then []
+        else
+          ( if $thisRepo != null then
+              ([ $eligible[] | select(.path == $thisRepo.path) ]) + ([ $eligible[] | select(.path != $thisRepo.path) ])
+            else $eligible end
+          ) as $ordered
+          | ["", "NEXT"] + [ $ordered[] | "\ncd " + .path + "\n/model " + implModel + "\n/ifq" ]
+        end
+    )
   | .[]
 '

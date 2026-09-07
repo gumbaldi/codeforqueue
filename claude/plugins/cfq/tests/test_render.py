@@ -150,8 +150,10 @@ class TestRender(CfqTestCase):
         self.assertIn("⚠️ Plugins", pony_text, f"ponytail mode warning should force the ⚠️ icon:\n{pony_text}")
 
     def test_dash_render_ponytail_off_mode_no_warning(self):
+        # `off` is ponytail's expected, configured state -- the mode clause vanishes entirely
+        # rather than printing a redundant "mode: off" (see test_dash.py's plugins-line coverage).
         pony_off_text = self._dash_render_ponytail_off()
-        self.assertIn("mode: off", pony_off_text, f"ponytail off mode not surfaced:\n{pony_off_text}")
+        self.assertNotIn("mode:", pony_off_text, f"mode clause should vanish when ponytailMode is off:\n{pony_off_text}")
         self.assertNotIn("cfq expects off", pony_off_text, "mode off should not carry a warning")
 
     def test_report_index_text_red_row_zero_cost_equivalence(self):

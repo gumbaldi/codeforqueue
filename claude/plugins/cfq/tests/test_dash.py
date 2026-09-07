@@ -5,10 +5,27 @@ mapping (default/global/repo/env source and masked-value display), and the `THIS
 block (open-batches-only, `--all`, and the expanded next batch).
 """
 
+import re
 import subprocess
 import unittest
+from pathlib import Path
 
 from cfq_testlib import CfqTestCase
+
+# The seven capability rows the ACTIONS section names (Step C's six actions plus Step D's
+# settings change) -- kept as one list so the drift guard below can check both directions: every
+# keyword must show up in the rendered dashboard AND in references/dashboard.md's own prose.
+ACTION_KEYWORDS = [
+    "priority",
+    "delete a batch",
+    "archive a batch",
+    "registry",
+    "dependency",
+    "todo",
+    "setting",
+]
+
+DASHBOARD_MD = Path(__file__).resolve().parents[1] / "references" / "dashboard.md"
 
 
 class TestDash(CfqTestCase):
@@ -293,6 +310,152 @@ class TestDash(CfqTestCase):
         self.assertEqual(
             len(with_all["thisRepo"]["batches"]), 2, f"batches = {with_all['thisRepo']['batches']}"
         )
+
+    # --- Phase 03: NEXT last, ACTIONS visible, unambiguous plugins line ---
+
+    def _plugin_home(self, home, mattpocock=False, ponytail=False, ponytail_default_mode=None):
+        if mattpocock:
+            (home / ".claude" / "plugins" / "cache" / "mattpocock-skills" / "mattpocock-skills" / "1.0.0").mkdir(
+                parents=True
+            )
+        if ponytail:
+            (home / ".claude" / "plugins" / "cache" / "ponytail" / "ponytail" / "4.8.4").mkdir(parents=True)
+        if ponytail_default_mode is not None:
+            cfg_dir = home / ".config" / "ponytail"
+            cfg_dir.mkdir(parents=True, exist_ok=True)
+            (cfg_dir / "config.json").write_text('{"defaultMode":"%s"}' % ponytail_default_mode)
+
+    def _plugins_line(self, rendered):
+        return next(
+            line for line in rendered.splitlines()
+            if re.match(r"^(✅|➖|⚠️) Plugins\b", line)
+        )
+
+    def test_next_section_order_last(self):
+        tmp = self._repos_dir / "orderroot"
+        repo = tmp / "repo"
+        self._plain_repo(repo)
+        self._open_batch(repo, "2026-06-01-a")
+
+        env = {"CFQ_SCAN_ROOTS": str(tmp)}
+        rendered = self.run_cfq("dash", "render", str(repo), env=env).stdout
+        lines = rendered.splitlines()
+
+        next_idx = lines.index("NEXT")
+        actions_idx = lines.index("ACTIONS")
+        config_idx = next(i for i, l in enumerate(lines) if l.startswith("CONFIG"))
+        self.assertGreater(actions_idx, config_idx, f"ACTIONS must follow CONFIG:\n{rendered}")
+        self.assertGreater(next_idx, actions_idx, f"NEXT must be last, after ACTIONS:\n{rendered}")
+
+    def test_next_current_repo_first(self):
+        tmp = self._repos_dir / "orderfirst"
+        repo_a = tmp / "repo-a"
+        repo_b = tmp / "repo-b"
+        self._plain_repo(repo_a)
+        self._plain_repo(repo_b)
+        self._open_batch(repo_a, "2026-06-01-a")
+        self._open_batch(repo_b, "2026-06-01-b")
+
+        env = {"CFQ_SCAN_ROOTS": str(tmp)}
+        rendered = self.run_cfq("dash", "render", str(repo_b), env=env).stdout
+
+        idx_b = rendered.index(f"cd {repo_b}")
+        idx_a = rendered.index(f"cd {repo_a}")
+        self.assertLess(idx_b, idx_a, f"current repo (repo-b) must be listed first in NEXT:\n{rendered}")
+
+    def test_next_section_absent_when_nothing_open(self):
+        tmp = self._repos_dir / "nonext"
+        repo = tmp / "repo"
+        self._plain_repo(repo)
+        self._archived_batch(repo, "2026-01-01-a")
+
+        env = {"CFQ_SCAN_ROOTS": str(tmp)}
+        rendered = self.run_cfq("dash", "render", str(repo), env=env).stdout
+
+        self.assertNotIn("NEXT", rendered, f"no NEXT header expected when nothing is open:\n{rendered}")
+        self.assertNotIn("/ifq", rendered, f"no handoff block expected when nothing is open:\n{rendered}")
+
+    def test_actions_section_lists_every_capability(self):
+        tmp = self._repos_dir / "actionsroot"
+        repo = tmp / "repo"
+        (repo / ".claude" / "cfq").mkdir(parents=True)
+        self._plain_repo(repo)
+
+        env = {"CFQ_SCAN_ROOTS": str(tmp)}
+        rendered = self.run_cfq("dash", "render", str(repo), env=env).stdout
+
+        self.assertIn("ACTIONS", rendered, f"ACTIONS header missing:\n{rendered}")
+        lowered = rendered.lower()
+        for kw in ACTION_KEYWORDS:
+            self.assertIn(kw, lowered, f"action keyword {kw!r} missing from the rendered dashboard:\n{rendered}")
+
+    def test_actions_drift_guard_matches_dashboard_md(self):
+        # Keeps the ACTIONS list and references/dashboard.md's prose from drifting apart in
+        # either direction -- a new management action must be documented AND rendered.
+        tmp = self._repos_dir / "driftroot"
+        repo = tmp / "repo"
+        (repo / ".claude" / "cfq").mkdir(parents=True)
+        self._plain_repo(repo)
+
+        env = {"CFQ_SCAN_ROOTS": str(tmp)}
+        rendered = self.run_cfq("dash", "render", str(repo), env=env).stdout.lower()
+        doc = DASHBOARD_MD.read_text().lower()
+
+        for kw in ACTION_KEYWORDS:
+            self.assertIn(kw, rendered, f"action keyword {kw!r} rendered nowhere but documented in dashboard.md")
+            self.assertIn(kw, doc, f"action keyword {kw!r} rendered but not documented in dashboard.md")
+
+    def test_plugins_line_mode_off_drops_clause(self):
+        tmp = self._repos_dir / "modeoffroot"
+        home = self._repos_dir / "modeoffhome"
+        repo = tmp / "repo"
+        (repo / ".claude" / "cfq").mkdir(parents=True)
+        self._plain_repo(repo)
+        self._plugin_home(home, mattpocock=True, ponytail=True, ponytail_default_mode="off")
+
+        rendered = self.run_cfq(
+            "dash", "render", str(tmp), home=home, env={"CFQ_SCAN_ROOTS": str(tmp)},
+        ).stdout
+        plugins_line = self._plugins_line(rendered)
+
+        self.assertTrue(
+            plugins_line.endswith("maintenance audit: on"),
+            f"plugins line should end with 'maintenance audit: on':\n{plugins_line}",
+        )
+        self.assertNotIn("mode:", plugins_line, f"mode clause should vanish when ponytailMode is off:\n{plugins_line}")
+
+    def test_plugins_line_mode_full_warns(self):
+        tmp = self._repos_dir / "modefullroot"
+        home = self._repos_dir / "modefullhome"
+        repo = tmp / "repo"
+        (repo / ".claude" / "cfq").mkdir(parents=True)
+        self._plain_repo(repo)
+        self._plugin_home(home, ponytail=True)
+
+        rendered = self.run_cfq(
+            "dash", "render", str(tmp), home=home, env={"CFQ_SCAN_ROOTS": str(tmp)},
+        ).stdout
+
+        self.assertIn("⚠️ Plugins", rendered, f"mode full should force the warning icon:\n{rendered}")
+        self.assertIn(
+            "ponytail default mode: full · cfq expects off", rendered, f"expected wording missing:\n{rendered}"
+        )
+
+    def test_plugins_line_audit_off(self):
+        tmp = self._repos_dir / "auditoffroot"
+        home = self._repos_dir / "auditoffhome"
+        repo = tmp / "repo"
+        (repo / ".claude" / "cfq").mkdir(parents=True)
+        self._plain_repo(repo)
+        self._plugin_home(home, mattpocock=True, ponytail=True, ponytail_default_mode="off")
+
+        rendered = self.run_cfq(
+            "dash", "render", str(tmp), home=home,
+            env={"CFQ_SCAN_ROOTS": str(tmp), "CFQ_USE_PONYTAIL": "false"},
+        ).stdout
+
+        self.assertIn("maintenance audit: off", rendered, f"expected wording missing:\n{rendered}")
+        self.assertIn("➖ Plugins", rendered, f"audit off keeps the plain icon, as today:\n{rendered}")
 
 
 if __name__ == "__main__":
