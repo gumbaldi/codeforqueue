@@ -32,19 +32,27 @@ settings=$("$cfq" settings list --repo "$repo")
 policy=$(jq -c '{implModels, allowAnyModel, implBlockedPlugins, onePhasePerSession, implExploreModel, implExploreModelComplex}' <<<"$settings")
 reporting=$(jq -c '{reportDir, htmlReport}' <<<"$settings")
 
+# candidates: the existing per-repo filter, kept for the fields --format=next doesn't carry
+# (dependsOn/unknownDeps/priority/open/done); the ranking decision itself (which name wins, is it
+# ambiguous) comes from `cfq scan --format=next` below, not from re-deriving it here.
 candidates=$("$cfq" scan | jq -c --arg repo "$repo" \
   '[(.repos[]? | select(.path == $repo) | .batches[]?
      | select(.archived == false and .open > 0))]')
 
-planning_json=$(jq -c '[.[] | select(.planning == true) | .name]' <<<"$candidates")
-blocked_json=$(jq -c '[.[] | select(.planning != true and .blocked == true)
-  | {name, dependsOn, unknownDeps}]' <<<"$candidates")
-eligible=$(jq -c '[.[] | select(.planning != true and .blocked != true)]' <<<"$candidates")
+next_json=$("$cfq" scan --format=next | jq -c --arg repo "$repo" \
+  '(.repos[]? | select(.path == $repo)) // {next: null, reason: null, blocked: [], planning: []}')
+
+planning_json=$(jq -c '.planning' <<<"$next_json")
+blocked_names=$(jq -c '.blocked' <<<"$next_json")
+blocked_json=$(jq -c --argjson names "$blocked_names" \
+  '[.[] | select(.name as $n | $names | index($n) != null) | {name, dependsOn, unknownDeps}]' <<<"$candidates")
+eligible=$(jq -c --argjson bn "$blocked_names" --argjson pn "$planning_json" \
+  '[.[] | select(.name as $n | ($bn + $pn | index($n)) == null)]' <<<"$candidates")
 
 inprogress_names=$(jq -c '[.[] | select(.inProgress == true) | .name]' <<<"$eligible")
 inprogress_count=$(jq 'length' <<<"$inprogress_names")
 
-if [ "$inprogress_count" -gt 1 ]; then
+if [ "$(jq -r '.reason' <<<"$next_json")" = "multipleInProgress" ]; then
   jq -n --arg repo "$repo" --argjson policy "$policy" --argjson reporting "$reporting" --argjson names "$inprogress_names" \
     '{status: "MULTIPLE_IN_PROGRESS", repo: {root: $repo}, policy: $policy, reporting: $reporting,
       selection: {selectable: [], blocked: [], planning: [], inProgress: null, multipleInProgress: $names},

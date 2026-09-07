@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The single source of numbers for the dashboard. Usage: cfq-scan.sh [--format=json|md|tsv|overview]
+# The single source of numbers for the dashboard. Usage: cfq-scan.sh [--format=json|md|tsv|overview|next]
 # json (default): one JSON object on stdout: { "repos": [ { "path", "plan", "todo", "batches": [
 #   {name, priority, open, done, archived, report, dependsOn, blocked, unknownDeps, inProgress,
 #    planning} ] } ] } — byte-identical to the no-flag output for every existing caller.
@@ -9,6 +9,12 @@
 # then flagged priority first, then name.
 # overview: one row per repo (Repo, Plan, Todo, Batches, Status) — Batches is open/done batch
 # counts, Status the most severe status among the repo's own batches, same vocabulary as above.
+# next: one object per repo — { path, next, reason, blocked, planning } — next is the batch name
+# `/ifq` would pick (null if none selectable), reason one of inProgress/priority/order/
+# multipleInProgress/null, blocked/planning are arrays of batch names. This is the one place the
+# `/ifq` selection ranking (non-archived, open>0, planning/blocked drop out, a single inProgress
+# batch wins, otherwise flagged priority first then name) is decided — see
+# cfq-ifq-preflight.sh, which consumes this format rather than re-deciding the ranking itself.
 set -eu
 
 format=json
@@ -19,8 +25,8 @@ for arg in "$@"; do
   esac
 done
 case "$format" in
-  json|md|tsv|overview) ;;
-  *) echo "cfq-scan.sh: unknown --format value '$format' (expected json|md|tsv|overview)" >&2; exit 1 ;;
+  json|md|tsv|overview|next) ;;
+  *) echo "cfq-scan.sh: unknown --format value '$format' (expected json|md|tsv|overview|next)" >&2; exit 1 ;;
 esac
 
 command -v jq >/dev/null 2>&1 || { echo "cfq-scan.sh: jq is required" >&2; exit 1; }
@@ -209,6 +215,31 @@ case "$format" in
             + ([.batches[] | select(.archived == true)] | length | tostring)),
           st(.batches)
         ] | "| " + join(" | ") + " |")
+    ' <<<"$scan_json"
+    ;;
+  next)
+    jq -c '
+      def rank:
+        ([.[] | select(.archived == false and .open > 0)]) as $candidates
+        | ([$candidates[] | select(.planning == true) | .name]) as $planning
+        | ([$candidates[] | select(.planning != true and .blocked == true) | .name]) as $blocked
+        | ([$candidates[] | select(.planning != true and .blocked != true)]) as $eligible
+        | ([$eligible[] | select(.inProgress == true) | .name]) as $inprog
+        | (if ($inprog | length) > 1 then
+             {next: null, reason: "multipleInProgress"}
+           elif ($inprog | length) == 1 then
+             {next: $inprog[0], reason: "inProgress"}
+           else
+             ($eligible | sort_by([(if .priority == "high" then 0 else 1 end), .name])) as $sorted
+             | if ($sorted | length) == 0 then
+                 {next: null, reason: null}
+               else
+                 {next: $sorted[0].name,
+                  reason: (if $sorted[0].priority == "high" then "priority" else "order" end)}
+               end
+           end) as $pick
+        | $pick + {blocked: $blocked, planning: $planning};
+      { repos: [ .repos[] | {path} + (.batches | rank) ] }
     ' <<<"$scan_json"
     ;;
 esac

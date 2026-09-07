@@ -568,4 +568,8 @@
       summary: ""
 - batchNumber: 16
   batch: 016-2026-09-06-cfq-dashboard-focus-and-affordances
-  status: parked
+  branch: cfq/016-2026-09-06-cfq-dashboard-focus-and-affordances
+  base: cfq/015-2026-09-06-ifq-remote-base-and-go-gate
+  started: 2026-09-07
+  status: in-progress
+  legacy: false
