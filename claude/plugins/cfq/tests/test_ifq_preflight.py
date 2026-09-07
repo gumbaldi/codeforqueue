@@ -55,7 +55,7 @@ exec "$d/cfq-branch-real.sh" "$@"
             "commit", "-q", "--allow-empty", "-m", "init",
         )
         self.run_clean(
-            "bash", str(self.scripts_copy / "cfq-registry.sh"), "add", str(repo),
+            "python3", str(self.scripts_copy / "cfq_registry.py"), "add", str(repo),
         )
         return repo
 

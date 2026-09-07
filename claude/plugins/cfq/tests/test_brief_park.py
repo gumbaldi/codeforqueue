@@ -1,7 +1,7 @@
 """Migrated from test-brief-park.sh.
 
 Self-test for scripts/cfq-brief.sh (batch listing plus --phase announcement mode) and
-scripts/cfq-park.sh (batch directory creation, .priority/.dependsOn, Git exclude registration).
+scripts/cfq_park.py (batch directory creation, .priority/.dependsOn, Git exclude registration).
 """
 
 import subprocess

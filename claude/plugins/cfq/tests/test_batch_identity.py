@@ -44,12 +44,12 @@ class BatchIdentityTest(CfqTestCase):
         )
 
     def test_settings_json_never_excluded(self):
-        text = (SCRIPTS_DIR / "cfq-layout.sh").read_text()
-        m = re.search(r"BLOCK_ENTRIES=\((?:\n.*){0,10}", text)
+        text = (SCRIPTS_DIR / "cfq_layout.py").read_text()
+        m = re.search(r"BLOCK_ENTRIES = \[(?:\n.*){0,10}", text)
         block = m.group(0) if m else ""
         self.assertNotIn(
             "settings.json", block,
-            msg="cfq-layout.sh's managed exclude block includes settings.json",
+            msg="cfq_layout.py's managed exclude block includes settings.json",
         )
 
     def test_gitstatepolicy_stays_single_switch(self):

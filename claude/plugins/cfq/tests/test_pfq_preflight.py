@@ -68,7 +68,7 @@ sys.exit(subprocess.run([sys.executable, str(d / "cfq_settings_real.py"), *sys.a
         reg.mkdir()
         self.run_clean("git", "init", "-q", cwd=reg)
         self.run_clean(
-            "bash", str(self.scripts_copy / "cfq-registry.sh"), "add", str(reg),
+            "python3", str(self.scripts_copy / "cfq_registry.py"), "add", str(reg),
             env={"HOME": str(self.home)},
         )
 
@@ -89,7 +89,7 @@ sys.exit(subprocess.run([sys.executable, str(d / "cfq_settings_real.py"), *sys.a
         out = self.json_out(self._run_pf(str(reg)))
         self.assertTrue(out["repo"]["known"], msg=f"registered repo should be known=true: {out}")
         reglist = self.run_clean(
-            "bash", str(self.scripts_copy / "cfq-registry.sh"), "list", env={"HOME": str(self.home)}
+            "python3", str(self.scripts_copy / "cfq_registry.py"), "list", env={"HOME": str(self.home)}
         ).stdout
         self.assertIn(str(reg), reglist.splitlines(), msg=f"test setup broken, registry doesn't list {reg}")
 

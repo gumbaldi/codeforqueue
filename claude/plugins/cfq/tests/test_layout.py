@@ -35,7 +35,6 @@ ALLOWED_LAYOUT_FILES = {
     "tests/test-layout-migration.sh",
     "tests/test-layout.sh",
     "scripts/cfq-paths.sh",
-    "scripts/cfq-layout.sh",
     "README.md",
 }
 
@@ -143,13 +142,40 @@ class LayoutTest(CfqTestCase):
         status_after = self.run_clean("git", "status", "--porcelain", cwd=self.repo).stdout
         self.assertEqual(status_after, status_before, msg="ensure staged/modified tracked files")
 
+    def test_ensure_creates_done_when_impl_exists_without_it(self):
+        # Edge case: .claude/cfq/impl already exists (e.g. from a partial prior run) but
+        # impl/done does not -- ensure must still create it.
+        impl = self.repo / ".claude" / "cfq" / "impl"
+        impl.mkdir(parents=True)
+        self.run_cfq("layout", "ensure", str(self.repo), check=True)
+        self.assertTrue((impl / "done").is_dir(), "ensure did not create impl/done alongside existing impl/")
+
+    def test_ensure_fresh_repo_with_trackable_policy_writes_no_exclude_block(self):
+        # The "permissive" gitStatePolicy verdict, exercised through `ensure` itself (not just
+        # `sync-git-policy`) on a repo that has no pre-existing exclude file at all.
+        self.run_cfq(
+            "settings", "set", "--repo", str(self.repo), "gitStatePolicy", "trackable", check=True,
+        )
+        self.run_cfq("layout", "ensure", str(self.repo), check=True)
+        gitdir = self.run_clean(
+            "git", "rev-parse", "--absolute-git-dir", cwd=self.repo
+        ).stdout.strip()
+        exclude_file = pathlib.Path(gitdir) / "info" / "exclude"
+        text = exclude_file.read_text() if exclude_file.exists() else ""
+        self.assertNotIn(
+            "# BEGIN cfq-managed", text, msg="trackable policy must not write a cfq-managed block"
+        )
+        out = self.json_out(self.run_cfq("layout", "status", str(self.repo)))
+        self.assertEqual(out["gitStatePolicy"], "trackable", msg="status gitStatePolicy")
+        self.assertEqual(out["excludeBlock"], "absent", msg="status excludeBlock under trackable")
+
     def test_no_repo_local_layout_leftovers(self):
         # 8. Repo-local `.claude/code-for-queue` literal must not reappear in normal scripts
         # or SKILL.md files — permitted only in the isolated migration utility, its focused
-        # test fixture, and the two phase-5 guard comments (cfq-paths.sh/cfq-layout.sh) and
-        # README.md's historical migration note that explicitly document the retired layout
-        # rather than using it. The global `$HOME/.claude/code-for-queue/` store is a
-        # different, still-current path — any line naming HOME/home/~ is that, not this.
+        # test fixture, and the cfq-paths.sh guard comment and README.md's historical migration
+        # note that explicitly document the retired layout rather than using it. The global
+        # `$HOME/.claude/code-for-queue/` store is a different, still-current path — any line
+        # naming HOME/home/~ is that, not this.
         proc = subprocess.run(
             [
                 "grep", "-rnE", r"\.claude/code-for-queue", str(PLUGIN_ROOT),

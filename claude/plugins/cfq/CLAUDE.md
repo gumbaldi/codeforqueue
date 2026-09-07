@@ -5,9 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A Claude Code plugin, not an application: four skills (`skills/*/SKILL.md`) whose implementations
-live under `scripts/` — four of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
-`cfq_doctor.py`) ported to stdlib Python as batch `014`, the 22 genuinely-shell-shaped scripts stay
-shell; `bin/cfq` decides which interpreter to run by file extension, see Commands — plus one
+live under `scripts/` — seven of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
+`cfq_doctor.py` ported as batch `014`; `cfq_layout.py`, `cfq_registry.py`, `cfq_park.py` ported as
+batch `017` phase 01) are stdlib Python, the remaining shell-shaped scripts stay shell; `bin/cfq`
+decides which interpreter to run by file extension, see Commands — plus one
 isolated migration utility (`scripts/migrations/`), eight TOML command aliases (`commands/`). No
 build step, no package manager; every shell script hard-fails without `jq` except `cfq_doctor.py`
 itself, which is jq-free on purpose — see Architecture.
@@ -79,7 +80,7 @@ hands off on the context gate; `code-for-queue` is the cross-repo dashboard plus
 Behaviour lives in the SKILL.md prose — the scripts only supply numbers and state.
 
 **The queue is the filesystem, split into three queues** under `<repo>/.claude/cfq/` (canonical
-path/layout helpers: `cfq-paths.sh` — pure path functions, no I/O — and `cfq-layout.sh`, which owns
+path/layout helpers: `cfq-paths.sh` — pure path functions, no I/O — and `cfq_layout.py`, which owns
 directory creation and the Git-state policy below; the previous repo-local layout is understood only
 by the isolated `scripts/migrations/cfq-layout-v1.sh` upgrade utility):
 `impl/` holds the phase-plan batches (`<YYYY-MM-DD>-<topic>/NN-slug.md`, `.priority`
@@ -88,7 +89,7 @@ by the isolated `scripts/migrations/cfq-layout-v1.sh` upgrade utility):
 until every named one is in `impl/done/`; an unresolvable name is reported, never blocking),
 `report.json` (per-phase implementation report plus telemetry, appended by `implement-for-queue`
 after every phase and travelling with the batch into `impl/done/`), `.planning` (written by
-`cfq-park.sh` when the batch directory is created, refreshed on every re-park during the same
+`cfq_park.py` when the batch directory is created, refreshed on every re-park during the same
 `plan-for-queue` session, removed only once `plan-for-queue`'s lint step goes clean — a batch
 younger than 30 minutes with this marker still present is still being written and `implement-for-queue`
 never offers it, mirroring `.lock`'s staleness window), a `done/` for finished phases
@@ -110,7 +111,7 @@ key on these paths — see **Hook contract** in `README.md` before renaming anyt
 
 **Three state files, all outside any repo**, in `$HOME/.claude/code-for-queue/` (the global store's
 own path — unrelated to and not renamed by the repo-local `.claude/cfq/` layout above): `repos.json`
-(registry of repos that ever had a queue, written by `cfq-registry.sh add` from both worker skills),
+(registry of repos that ever had a queue, written by `cfq_registry.py add` from both worker skills),
 `settings.json` (the global settings tier, `cfq_settings.py`), and `state.json` (schema-less runtime
 state such as `setupDone`, `cfq_settings.py state get/set`). `cfq-scan.sh` unions the registry with a
 `find` over `scanRoots`, so a repo is discovered even if it was never registered.

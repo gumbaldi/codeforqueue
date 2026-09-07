@@ -55,7 +55,7 @@ candidates=$(printf '%s\n' "$candidates" | sed '/^$/d' | sort -u)
 
 for repo in $candidates; do
   # Direct sibling call: inside a per-repo loop, see CLAUDE.md's dispatcher-loop-exception note.
-  "$script_dir/cfq-registry.sh" add "$repo" >/dev/null
+  python3 "$script_dir/cfq_registry.py" add "$repo" >/dev/null
 done
 
 trim() { sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$1"; }
