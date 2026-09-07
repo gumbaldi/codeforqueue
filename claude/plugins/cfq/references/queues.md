@@ -118,10 +118,9 @@ hardcoded:
 `reconcile` never deletes anything and never touches a ledger entry with no directory — a reserved
 number whose batch never got parked is a legitimate abandoned reservation, not a gap to close.
 
-## Phase Announcement and Go Gate (Step 7)
+## Phase Announcement (Step 7)
 
-Runs after the size gate, before any code is written, every phase — the fine-grained counterpart
-to Step 4's one coarse per-batch go-ahead. The announcement is
+Runs after the size gate, before any code is written, every phase. The announcement is
 `bin/cfq brief "<batch-dir>" --phase <NN>`'s output, rendered as returned, no rewording —
 deterministic, extracted from the phase file, so it cannot drift in wording between phases:
 
@@ -132,10 +131,10 @@ PHASE 02 · ifq-per-phase-go-gate · Size L
   Check    <first command line from ## Verification>
 ```
 
-Then one `AskUserQuestion`, two options: **Go** — "proceed, implement this phase now" — and
-**Cancel** — "release the lock and end the session, nothing touched". `Cancel` runs
-`bin/cfq lock release "<repo-root>"`, reports "cancelled before implementation, nothing touched",
-and ends; it never leaves the lock held. `Go` proceeds straight to Step 8.
+Step 8 starts right after — there is no per-phase go-ahead beyond this announcement. What still
+stops a session: the size gate's `HANDOFF` verdict (Step 6, before this step runs), `stopUsed`
+after the phase (Step 10), and `onePhasePerSession` ending the session after exactly one phase
+regardless. The `WARN` variant below is the one case that still asks before proceeding.
 
 **`WARN` variant.** When `contextGate.verdict` is `WARN`, one warning line precedes the
 announcement, naming the reason and the concrete numbers from `contextGate.note` in the user's
@@ -151,12 +150,14 @@ PHASE 02 · ifq-per-phase-go-gate · Size L
   Check    <first command line from ## Verification>
 ```
 
-The `AskUserQuestion` then carries a third option: **Go** — "proceed, implement this phase now",
-its description naming the budget state so the user sees what they are accepting — and **must
-not** claim the attempt will fail. **Handoff** — "end the session cleanly instead of implementing",
+Then one `AskUserQuestion`, three options: **Go** — "proceed, implement this phase now", its
+description naming the budget state so the user sees what they are accepting — and **must not**
+claim the attempt will fail. **Handoff** — "end the session cleanly instead of implementing",
 reusing Step 10's `STOP` sequence (telemetry sync, lock release, the `HANDOFF ·
 implement-for-queue` short report) — this is the option that used to be forced on the user; it is
-now the one they choose. **Cancel** stays as above. No option may be phrased as futile — the
+now the one they choose. **Cancel** — "release the lock and end the session, nothing touched",
+runs `bin/cfq lock release "<repo-root>"`, reports "cancelled before implementation, nothing
+touched", and ends; it never leaves the lock held. No option may be phrased as futile — the
 observed bug produced a choice between "start anyway, but it will hand off immediately without
 implementing" and "cancel"; every option offered here must actually do what it says. This same
 warning line is reused verbatim at Step 4, above the batch briefing — one wording, two call

@@ -88,7 +88,7 @@ fi
 
 qdir="$repo/.claude/cfq/impl"
 batch_dir="$qdir/$chosen"
-brief_text=$("$cfq" brief "$batch_dir")
+brief_text=$("$cfq" brief "$batch_dir" --with-done)
 cand=$(jq -c --arg n "$chosen" '.[] | select(.name == $n)' <<<"$candidates")
 
 resume_json=$("$cfq" resume "$repo" "$batch_dir")
