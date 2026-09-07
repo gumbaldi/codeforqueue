@@ -584,3 +584,9 @@
     - phase: "03-dash-next-and-actions-sections"
       status: "green"
       summary: "Moved the cd/model/ifq handoff into its own NEXT section (current repo first, always last), added an ACTIONS section listing every Step C/D capability with a drift guard against dashboard.md, and made the plugins line unambiguous: mode: off vanishes instead of printing a false-alarm-looking clause, and the ponytail audit switch now reads maintenance audit: on/off instead of the ambiguous audit on/off."
+- batchNumber: 17
+  batch: 017-2026-09-07-port-remaining-scripts-to-python
+  status: parked
+- batchNumber: 18
+  batch: 018-2026-09-07-plan-critique-and-scope-guard
+  status: parked
