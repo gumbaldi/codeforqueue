@@ -550,8 +550,22 @@
   branch: cfq/015-2026-09-06-ifq-remote-base-and-go-gate
   base: cfq/014-2026-09-03-port-core-scripts-to-python
   started: 2026-09-06
-  status: in-progress
+  status: done
   legacy: false
+  finished: 2026-09-07
+  phases:
+    - phase: "01-branch-check-subcommand"
+      status: "green"
+      summary: ""
+    - phase: "02-remote-candidates-and-base-ranking"
+      status: "green"
+      summary: ""
+    - phase: "03-local-commits-not-on-origin"
+      status: ""
+      summary: ""
+    - phase: "04-drop-phase-go-gate-and-full-briefing"
+      status: "green"
+      summary: ""
 - batchNumber: 16
   batch: 016-2026-09-06-cfq-dashboard-focus-and-affordances
   status: parked
