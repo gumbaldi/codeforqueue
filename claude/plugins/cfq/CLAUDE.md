@@ -5,9 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A Claude Code plugin, not an application: four skills (`skills/*/SKILL.md`) whose implementations
-live under `scripts/` — seven of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
+live under `scripts/` — nine of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
 `cfq_doctor.py` ported as batch `014`; `cfq_layout.py`, `cfq_registry.py`, `cfq_park.py` ported as
-batch `017` phase 01) are stdlib Python, the remaining shell-shaped scripts stay shell; `bin/cfq`
+batch `017` phase 01; `cfq_lock.py`, `cfq_maintenance.py` ported as batch `017` phase 02) are
+stdlib Python, the remaining shell-shaped scripts stay shell; `bin/cfq`
 decides which interpreter to run by file extension, see Commands — plus one
 isolated migration utility (`scripts/migrations/`), eight TOML command aliases (`commands/`). No
 build step, no package manager; every shell script hard-fails without `jq` except `cfq_doctor.py`
@@ -140,7 +141,7 @@ one exception that lives outside this schema entirely — it's runtime state, no
 through `cfq_settings.py state get/set` against a separate schema-less store instead.
 
 **`cfq-runtime.sh` is the one Claude-Code-specific adapter.** Session id, transcript path, model
-name and context usage each used to be resolved independently in `ctx-usage.sh`, `cfq-lock.sh` and
+name and context usage each used to be resolved independently in `ctx-usage.sh`, `cfq_lock.py` and
 `cfq-telemetry.sh`; all three now call `cfq-runtime.sh transcript-path [--repo <path>] [--exact]`
 and `cfq-runtime.sh context` instead of re-deriving it. `context` prefers the statusline payload,
 falls back to parsing the transcript directly, and returns `status: "degraded"` (primary diagnostic

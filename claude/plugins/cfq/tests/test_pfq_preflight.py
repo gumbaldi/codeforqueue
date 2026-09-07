@@ -18,7 +18,7 @@ class PfqPreflightTest(CfqTestCase):
     def setUp(self):
         super().setUp()
         # Copies the whole scripts/ dir so cfq-pfq-preflight.sh's own script_dir resolution (and
-        # every sibling script it shells out to, e.g. cfq-maintenance.sh) resolves inside the
+        # every sibling script it shells out to, e.g. cfq_maintenance.py) resolves inside the
         # copy, then swaps cfq_settings.py for a wrapper that logs every subcommand before
         # delegating to the real module. bin/ is copied alongside scripts/ (same relative layout
         # as the real plugin) because internal sibling calls now route through bin/cfq, which
@@ -115,12 +115,12 @@ sys.exit(subprocess.run([sys.executable, str(d / "cfq_settings_real.py"), *sys.a
 
         out = self.json_out(self._run_pf(str(reg)))
         direct = self.run_clean(
-            "bash", str(self.scripts_copy / "cfq-maintenance.sh"), "due", str(reg),
+            "python3", str(self.scripts_copy / "cfq_maintenance.py"), "due", str(reg),
             env={"HOME": str(self.home)},
         ).stdout.strip()
         got_pair = f"{out['maintenance']['status']} {out['maintenance']['n'] if out['maintenance']['n'] is not None else 'null'}"
         self.assertEqual(
-            got_pair, direct, msg=f"maintenance field != direct cfq-maintenance.sh output: {out} vs {direct}"
+            got_pair, direct, msg=f"maintenance field != direct cfq_maintenance.py output: {out} vs {direct}"
         )
 
         # security.available

@@ -278,7 +278,7 @@ class BranchTest(CfqTestCase):
         self.run_cfq(
             "changelog", "init", str(repo), branch_name, "main", batch, check=True,
         )
-        # Mirrors the real flow: by the time `/ifq` reaches `branch plan`, `cfq-lock.sh` has
+        # Mirrors the real flow: by the time `/ifq` reaches `branch plan`, `cfq_lock.py` has
         # already run `layout ensure`, so the queue's own untracked state is Git-excluded and
         # never shows up as a dirty tree on its own.
         self.run_cfq("layout", "ensure", str(repo), check=True)
