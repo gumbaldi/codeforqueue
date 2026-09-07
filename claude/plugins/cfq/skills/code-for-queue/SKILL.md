@@ -101,8 +101,9 @@ step didn't run at all.
 ```
 
 Print its output exactly as returned — the `PRECHECKS` header, `Dash`/`Plugins` status lines,
-`QUEUES`, `THIS REPO · <name>` (when applicable), the copyable `cd`/`/model`/`/ifq` sequence, and
-`CONFIG · <name>` are all already rendered. No reformatting, no rebuilding a table from `.repos`/
+`QUEUES`, `THIS REPO · <name>` (when applicable, open batches only, plus the expanded next batch),
+the copyable `cd`/`/model`/`/ifq` sequence, and `CONFIG · <name>` are all already rendered. No
+reformatting, no rebuilding a table from `.repos`/
 `.thisRepo`/`.settings` by hand — this is the same aggregation Step 0 fetches as JSON, formatted by
 the script instead of the model. (The bare `/cfq` slash command already prints this block via its
 own injection before the model runs at all; this step exists for every other way the skill gets

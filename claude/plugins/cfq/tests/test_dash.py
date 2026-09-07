@@ -1,7 +1,8 @@
 """Migrated from test-dash.sh.
 
-Self-test for scripts/cfq-dash.sh: repo rollup, thisRepo scoping, and the settings marker
-mapping (default/global/repo/env source and masked-value display).
+Self-test for scripts/cfq-dash.sh: repo rollup, thisRepo scoping, the settings marker
+mapping (default/global/repo/env source and masked-value display), and the `THIS REPO` render
+block (open-batches-only, `--all`, and the expanded next batch).
 """
 
 import subprocess
@@ -14,6 +15,36 @@ class TestDash(CfqTestCase):
     def _plain_repo(self, path):
         path.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init", "-q"], cwd=path, check=True)
+
+    def _phase_file(self, path, title, size="M"):
+        path.write_text(
+            f"# {title}\n\n## Size\n\n{size}\n\n## Context\n\nContext sentence one. Context sentence two.\n"
+        )
+
+    def _open_batch(self, repo, name, open_nums=("01",), done_nums=(), priority=None, depends_on=None, sizes=None):
+        """Batch dir under impl/<name>: `open_nums` become open NN-*.md phases, `done_nums`
+        become ticked ones under done/. `sizes` maps a phase num to its `## Size` value."""
+        sizes = sizes or {}
+        bdir = repo / ".claude" / "cfq" / "impl" / name
+        bdir.mkdir(parents=True, exist_ok=True)
+        for num in open_nums:
+            self._phase_file(bdir / f"{num}-phase.md", f"Phase {num}", size=sizes.get(num, "M"))
+        if done_nums:
+            (bdir / "done").mkdir(exist_ok=True)
+            for num in done_nums:
+                self._phase_file(bdir / "done" / f"{num}-phase.md", f"Phase {num}", size=sizes.get(num, "M"))
+        if priority:
+            (bdir / ".priority").write_text(priority)
+        if depends_on:
+            (bdir / ".dependsOn").write_text(depends_on + "\n")
+        return bdir
+
+    def _archived_batch(self, repo, name, phases=1):
+        bdir = repo / ".claude" / "cfq" / "impl" / "done" / name
+        bdir.mkdir(parents=True, exist_ok=True)
+        for i in range(1, phases + 1):
+            (bdir / f"{i:02d}-phase.md").touch()
+        return bdir
 
     def test_repo_rollup_and_render(self):
         tmp = self._repos_dir / "dashroot"
@@ -132,6 +163,136 @@ class TestDash(CfqTestCase):
         envl = key_row("docLevel", run_dash(env={"CFQ_DOC_LEVEL": "standard"}))
         self.assertEqual(envl["marker"], "E", f"env:repo-legacy marker = {envl}")
         self.assertEqual(envl["source"], "env:repo-legacy", f"env:repo-legacy source = {envl}")
+
+    def test_this_repo_open_only_and_next_expanded(self):
+        # routine: one open batch among three archived ones -> exactly one table row, a "N
+        # batches done" summary, and the open batch expanded (it's the only /ifq candidate).
+        tmp = self._repos_dir / "focusroot"
+        repo = tmp / "repo"
+        self._plain_repo(repo)
+        self._open_batch(repo, "2026-02-01-open")
+        for n in ("2026-01-01-a", "2026-01-02-b", "2026-01-03-c"):
+            self._archived_batch(repo, n)
+
+        env = {"CFQ_SCAN_ROOTS": str(tmp)}
+        rendered = self.run_cfq("dash", "render", str(repo), env=env).stdout
+
+        self.assertIn("| 2026-02-01-open |", rendered, f"open batch row missing:\n{rendered}")
+        for n in ("2026-01-01-a", "2026-01-02-b", "2026-01-03-c"):
+            self.assertNotIn(n, rendered, f"archived batch {n} should not appear:\n{rendered}")
+        self.assertIn("3 batches done", rendered, f"summary line missing:\n{rendered}")
+        self.assertIn(
+            "2026-02-01-open (next in order)", rendered, f"expanded header missing:\n{rendered}"
+        )
+
+    def test_this_repo_nothing_open(self):
+        # nothing open: table and expansion both disappear, only the summary remains.
+        tmp = self._repos_dir / "nothingopen"
+        repo = tmp / "repo"
+        self._plain_repo(repo)
+        for n in ("2026-01-01-a", "2026-01-02-b", "2026-01-03-c"):
+            self._archived_batch(repo, n)
+
+        env = {"CFQ_SCAN_ROOTS": str(tmp)}
+        rendered = self.run_cfq("dash", "render", str(repo), env=env).stdout
+
+        self.assertIn("THIS REPO", rendered, f"section title missing:\n{rendered}")
+        self.assertNotIn("| Batch | Priority", rendered, f"table header should be gone:\n{rendered}")
+        self.assertIn("3 batches done", rendered, f"summary line missing:\n{rendered}")
+        self.assertNotIn("in progress)", rendered, f"no batch should be expanded:\n{rendered}")
+        self.assertNotIn("next in order)", rendered, f"no batch should be expanded:\n{rendered}")
+        self.assertNotIn(f"cd {repo}", rendered, f"repo with nothing open must not offer /ifq:\n{rendered}")
+
+    def test_this_repo_several_open_only_in_progress_expanded(self):
+        # several open, one inProgress: all three rows show, but only the inProgress batch (which
+        # outranks the flagged one) gets expanded.
+        tmp = self._repos_dir / "severalopen"
+        repo = tmp / "repo"
+        self._plain_repo(repo)
+        self._open_batch(repo, "2026-03-01-a", open_nums=("02",), done_nums=("01",))
+        self._open_batch(repo, "2026-03-02-b")
+        self._open_batch(repo, "2026-03-03-c", priority="high")
+
+        env = {"CFQ_SCAN_ROOTS": str(tmp)}
+        rendered = self.run_cfq("dash", "render", str(repo), env=env).stdout
+
+        for n in ("2026-03-01-a", "2026-03-02-b", "2026-03-03-c"):
+            self.assertIn(f"| {n} |", rendered, f"row for {n} missing:\n{rendered}")
+        self.assertIn("2026-03-01-a (in progress)", rendered, f"expanded header missing:\n{rendered}")
+        self.assertNotIn("2026-03-02-b (", rendered, f"non-next batch must not expand:\n{rendered}")
+        self.assertNotIn("2026-03-03-c (", rendered, f"flagged batch loses to inProgress:\n{rendered}")
+
+    def test_this_repo_all_flag_lists_archived_too(self):
+        # --all: every batch shown, archived included, no summary line, expansion unchanged.
+        tmp = self._repos_dir / "allflag"
+        repo = tmp / "repo"
+        self._plain_repo(repo)
+        self._open_batch(repo, "2026-02-01-open")
+        self._archived_batch(repo, "2026-01-01-a")
+
+        env = {"CFQ_SCAN_ROOTS": str(tmp)}
+        rendered = self.run_cfq("dash", "render", "--all", str(repo), env=env).stdout
+
+        self.assertIn("| 2026-02-01-open |", rendered, f"open batch row missing:\n{rendered}")
+        self.assertIn("| 2026-01-01-a |", rendered, f"archived batch row missing:\n{rendered}")
+        self.assertNotIn("batches done", rendered, f"summary must be omitted with --all:\n{rendered}")
+        self.assertIn(
+            "2026-02-01-open (next in order)", rendered, f"expansion missing with --all:\n{rendered}"
+        )
+
+    def test_this_repo_expansion_shows_done_and_open_phases(self):
+        # expansion source: the expanded block is `brief --with-done` verbatim -- 01 ticked, 02/03
+        # open with their sizes.
+        tmp = self._repos_dir / "expansource"
+        repo = tmp / "repo"
+        self._plain_repo(repo)
+        self._open_batch(
+            repo, "2026-04-01-mixed",
+            open_nums=("02", "03"), done_nums=("01",),
+            sizes={"02": "M", "03": "L"},
+        )
+
+        env = {"CFQ_SCAN_ROOTS": str(tmp)}
+        rendered = self.run_cfq("dash", "render", str(repo), env=env).stdout
+
+        self.assertRegex(rendered, r"✔ 01\b", f"phase 01 should be ticked:\n{rendered}")
+        self.assertRegex(rendered, r"\b02\b.*\[M\]", f"phase 02 size missing:\n{rendered}")
+        self.assertRegex(rendered, r"\b03\b.*\[L\]", f"phase 03 size missing:\n{rendered}")
+
+    def test_this_repo_blocked_next_names_dependency(self):
+        # blocked next: the only open (phase-bearing) batch is blocked -> row present, no
+        # expansion, one line naming the dependency it waits on.
+        tmp = self._repos_dir / "blockednext"
+        repo = tmp / "repo"
+        self._plain_repo(repo)
+        # A phase-less directory is enough to make `2026-05-02-target` structurally blocked
+        # (cfq-scan.sh only checks the path exists) without itself becoming an open candidate.
+        (repo / ".claude" / "cfq" / "impl" / "2026-05-01-dep").mkdir(parents=True)
+        self._open_batch(repo, "2026-05-02-target", depends_on="2026-05-01-dep")
+
+        env = {"CFQ_SCAN_ROOTS": str(tmp)}
+        rendered = self.run_cfq("dash", "render", str(repo), env=env).stdout
+
+        self.assertIn("| 2026-05-02-target |", rendered, f"blocked batch row missing:\n{rendered}")
+        self.assertNotIn("2026-05-02-target (", rendered, f"blocked batch must not expand:\n{rendered}")
+        self.assertIn("2026-05-01-dep", rendered, f"blocking dependency not named:\n{rendered}")
+        self.assertIn("blocked", rendered.lower(), f"blocking note missing:\n{rendered}")
+
+    def test_dash_json_all_flag_accepted_and_ignored(self):
+        # JSON mode always carried every batch; --all must be accepted and change nothing.
+        tmp = self._repos_dir / "jsonall"
+        repo = tmp / "repo"
+        self._plain_repo(repo)
+        self._open_batch(repo, "2026-02-01-open")
+        self._archived_batch(repo, "2026-01-01-a")
+
+        env = {"CFQ_SCAN_ROOTS": str(tmp)}
+        plain = self.json_out(self.run_cfq("dash", str(repo), env=env))
+        with_all = self.json_out(self.run_cfq("dash", "--all", str(repo), env=env))
+        self.assertEqual(plain, with_all, "`--all` must not change the JSON output")
+        self.assertEqual(
+            len(with_all["thisRepo"]["batches"]), 2, f"batches = {with_all['thisRepo']['batches']}"
+        )
 
 
 if __name__ == "__main__":
