@@ -1,6 +1,6 @@
 """Migrated from test-batch-id.sh.
 
-Self-test for scripts/cfq-batch-id.sh -- allocation, renumbering and reconcile of the
+Self-test for scripts/cfq_batch_id.py -- allocation, renumbering and reconcile of the
 numbered-batch-identity ledger.
 """
 
@@ -221,10 +221,10 @@ class BatchIdTest(CfqTestCase):
         self.assertEqual(self._status(proc), "INVALID_ARGUMENT", "bad slug status")
 
     def test_helper_never_reads_claude_runtime(self):
-        text = (SCRIPTS_DIR / "cfq-batch-id.sh").read_text()
+        text = (SCRIPTS_DIR / "cfq_batch_id.py").read_text()
         for needle in ("CLAUDE_", "cfq-runtime"):
             self.assertNotIn(
-                needle, text, "cfq-batch-id.sh references Claude runtime/session state",
+                needle, text, "cfq_batch_id.py references Claude runtime/session state",
             )
 
     def test_disabled_changelog_refuses_allocate(self):
@@ -380,10 +380,10 @@ class BatchIdTest(CfqTestCase):
         )
 
     def test_width_migration_never_touches_git(self):
-        text = (SCRIPTS_DIR / "cfq-batch-id.sh").read_text()
+        text = (SCRIPTS_DIR / "cfq_batch_id.py").read_text()
         self.assertIsNone(
             re.search(r"(^|[^A-Za-z])git([^A-Za-z]|$)", text),
-            "cfq-batch-id.sh performs Git operations (width migration must never touch Git)",
+            "cfq_batch_id.py performs Git operations (width migration must never touch Git)",
         )
 
     def test_action_names_configured_changelog_path_not_default(self):

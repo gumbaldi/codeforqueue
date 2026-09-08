@@ -50,7 +50,7 @@ class DispatcherTest(CfqTestCase):
     def test_03_exit_codes_propagate(self):
         rc_dispatcher = self.run_cfq("batch", "allocate", "/no-such-repo-path").returncode
         rc_direct = subprocess.run(
-            ["bash", str(SCRIPTS_DIR / "cfq-batch-id.sh"), "allocate", "/no-such-repo-path"],
+            ["python3", str(SCRIPTS_DIR / "cfq_batch_id.py"), "allocate", "/no-such-repo-path"],
             capture_output=True, text=True,
         ).returncode
         self.assertNotEqual(rc_dispatcher, 0, msg="dispatcher exit 0 on a failing subcommand")

@@ -5,11 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A Claude Code plugin, not an application: four skills (`skills/*/SKILL.md`) whose implementations
-live under `scripts/` — fourteen of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
+live under `scripts/` — fifteen of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
 `cfq_doctor.py` ported as batch `014`; `cfq_layout.py`, `cfq_registry.py`, `cfq_park.py` ported as
 batch `017` phase 01; `cfq_lock.py`, `cfq_maintenance.py` ported as batch `017` phase 02;
 `cfq_runtime.py` ported as batch `017` phase 03; `ctx_usage.py`, `cfq_telemetry.py` ported as
-batch `017` phase 04; `cfq_scan.py`, `cfq_queue_overlap.py` ported as batch `017` phase 05) are
+batch `017` phase 04; `cfq_scan.py`, `cfq_queue_overlap.py` ported as batch `017` phase 05;
+`cfq_batch_id.py` ported as batch `017` phase 06) are
 stdlib Python, the remaining shell-shaped
 scripts stay shell; `bin/cfq`
 decides which interpreter to run by file extension, see Commands — plus one
@@ -62,7 +63,7 @@ with no CLI and no noun of its own, imported by `cfq_*.py` implementations the w
 is sourced by shell ones (`cfq_lib/paths.py` deliberately duplicates `cfq-paths.sh` under a
 consistency test, `tests/test_layout.py`, until the last shell script sourcing it is ported — see
 Architecture). Two further exceptions stay direct filename calls, each commented at its call site:
-- **Inner-loop calls** (`cfq-batch-id.sh`'s per-pair rename and per-orphan reserve,
+- **Inner-loop calls** (`cfq_batch_id.py`'s per-pair rename and per-orphan reserve,
   `cfq_scan.py`'s per-repo registry-add and per-repo settings-get): a dispatcher exec resolves
   `../bin/cfq` fresh on every iteration, so the direct sibling call is the cheaper trade there.
 - **`cfq_report.py`'s internal call to `cfq_scan.py`** (used by the `index` verb): `bin/cfq`
