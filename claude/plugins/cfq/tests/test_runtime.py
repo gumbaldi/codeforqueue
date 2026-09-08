@@ -19,9 +19,9 @@ from cfq_testlib import CfqTestCase
 SID = "sid1"
 SLUG = str(pathlib.Path.cwd()).replace("/", "-")
 
-CORE_BINS_NO_JQ = [
-    "bash", "git", "head", "ls", "date", "stat", "printf", "mkdir", "tr", "pwd", "sed", "grep",
-    "cat", "dirname", "mv", "rm", "find", "sort",
+CORE_BINS = [
+    "bash", "python3", "git", "head", "ls", "date", "stat", "printf", "mkdir", "tr", "pwd",
+    "sed", "grep", "cat", "dirname", "mv", "rm", "find", "sort",
 ]
 
 
@@ -295,20 +295,21 @@ class TestRuntime(CfqTestCase):
         out = self.json_out(self._run("plugins", home=h, env={"XDG_CONFIG_HOME": str(h / "xdg")}))
         self.assertEqual(out["ponytailMode"], "full")
 
-    def test_missing_jq_dependency_missing_on_every_subcommand(self):
-        nojq_dir = self.minimal_path(*CORE_BINS_NO_JQ)
-        nojq_home = self._new_home()
+    def test_missing_python3_reports_named_guard_message_on_every_subcommand(self):
+        nopython_dir = self.minimal_path(*[b for b in CORE_BINS if b != "python3"])
+        nopython_home = self._new_home()
+        guard = "cfq: python3 is required for 'runtime' but was not found on PATH."
         for sub in (
             "session-id", "transcript-path", "context", "model", "version", "capabilities",
             "plugins", "diagnose",
         ):
             with self.subTest(sub=sub):
-                proc = self._run(sub, home=nojq_home, env={"PATH": nojq_dir})
-                self.assertEqual(proc.returncode, 1, f"{sub} exit={proc.returncode} (want 1)")
-                self.assertIn("DEPENDENCY_MISSING", proc.stdout + proc.stderr, f"{sub} message")
-        proc = self._run("plugin-installed", "pluginX", home=nojq_home, env={"PATH": nojq_dir})
-        self.assertEqual(proc.returncode, 1, f"plugin-installed exit={proc.returncode} (want 1)")
-        self.assertIn("DEPENDENCY_MISSING", proc.stdout + proc.stderr, "plugin-installed message")
+                proc = self._run(sub, home=nopython_home, env={"PATH": nopython_dir})
+                self.assertEqual(proc.returncode, 127, f"{sub} exit={proc.returncode} (want 127)")
+                self.assertIn(guard, proc.stderr, f"{sub} message")
+        proc = self._run("plugin-installed", "pluginX", home=nopython_home, env={"PATH": nopython_dir})
+        self.assertEqual(proc.returncode, 127, f"plugin-installed exit={proc.returncode} (want 127)")
+        self.assertIn(guard, proc.stderr, "plugin-installed message")
 
     def test_diagnose_always_well_formed_even_on_total_failure(self):
         h = self._new_home()

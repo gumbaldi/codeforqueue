@@ -5,10 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A Claude Code plugin, not an application: four skills (`skills/*/SKILL.md`) whose implementations
-live under `scripts/` — nine of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
+live under `scripts/` — ten of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
 `cfq_doctor.py` ported as batch `014`; `cfq_layout.py`, `cfq_registry.py`, `cfq_park.py` ported as
-batch `017` phase 01; `cfq_lock.py`, `cfq_maintenance.py` ported as batch `017` phase 02) are
-stdlib Python, the remaining shell-shaped scripts stay shell; `bin/cfq`
+batch `017` phase 01; `cfq_lock.py`, `cfq_maintenance.py` ported as batch `017` phase 02;
+`cfq_runtime.py` ported as batch `017` phase 03) are stdlib Python, the remaining shell-shaped
+scripts stay shell; `bin/cfq`
 decides which interpreter to run by file extension, see Commands — plus one
 isolated migration utility (`scripts/migrations/`), eight TOML command aliases (`commands/`). No
 build step, no package manager; every shell script hard-fails without `jq` except `cfq_doctor.py`
@@ -140,17 +141,17 @@ rate-limit `WARN`. `setupDone` is the
 one exception that lives outside this schema entirely — it's runtime state, not policy, and goes
 through `cfq_settings.py state get/set` against a separate schema-less store instead.
 
-**`cfq-runtime.sh` is the one Claude-Code-specific adapter.** Session id, transcript path, model
+**`cfq_runtime.py` is the one Claude-Code-specific adapter.** Session id, transcript path, model
 name and context usage each used to be resolved independently in `ctx-usage.sh`, `cfq_lock.py` and
-`cfq-telemetry.sh`; all three now call `cfq-runtime.sh transcript-path [--repo <path>] [--exact]`
-and `cfq-runtime.sh context` instead of re-deriving it. `context` prefers the statusline payload,
+`cfq-telemetry.sh`; all three now call `cfq_runtime.py transcript-path [--repo <path>] [--exact]`
+and `cfq_runtime.py context` instead of re-deriving it. `context` prefers the statusline payload,
 falls back to parsing the transcript directly, and returns `status: "degraded"` (primary diagnostic
 preserved) rather than silently hiding it when the documented interface itself breaks structurally —
 callers may still use the fallback value, but the breakage stays visible. `ctxWindowLimits` (the
 model→context-window-size table) lives in the settings schema as data, not in this adapter, since
 it's a retunable number rather than detection logic. Acceptance test: a
 Claude Code runtime/statusline/plugin-cache representation change should only ever require editing
-`cfq-runtime.sh` (+ its tests/fixtures). If a change to any other aggregator is ever needed for
+`cfq_runtime.py` (+ its tests/fixtures). If a change to any other aggregator is ever needed for
 such a change, that is itself a regression to fix, not an accepted cost.
 
 **`cfq_doctor.py` is the host dependency doctor**, deliberately jq-free (it's the one check every
@@ -162,7 +163,7 @@ healthy host and warns both user and Claude only when a required command is miss
 installs anything itself.
 
 **Telemetry is metadata only.** `cfq-telemetry.sh` derives everything from the running session's own
-transcript (`cfq-runtime.sh`'s path resolution, reused rather than reinvented) — never from a model's
+transcript (`cfq_runtime.py`'s path resolution, reused rather than reinvented) — never from a model's
 own estimate of its token usage. Only numbers, timestamps and names are carried into a record;
 `tests/test_telemetry.py` asserts this structurally (every leaf field name against a whitelist) so
 that adding a field which happens to carry free text fails the test on purpose, not by omission.
@@ -231,7 +232,7 @@ execution should re-run that comparison first, not take this paragraph on faith.
 ## Status Vocabulary
 
 Every read-only aggregator (`cfq-pfq-preflight.sh`, `cfq-ifq-preflight.sh`, `cfq-scan.sh
---format=`, `cfq_report.py index/detail`, `cfq-runtime.sh plugins`, and any future one) reports a
+--format=`, `cfq_report.py index/detail`, `cfq_runtime.py plugins`, and any future one) reports a
 `status` field skills react to structurally, never by parsing prose. `status` is always exactly one
 of:
 
@@ -249,7 +250,7 @@ of:
 - `BATCH_WIDTH_MIGRATION_BLOCKED` — parking the next numbered batch would require a wider fixed
   width, but active CFQ queue work still exists. The batch-id helper's own action/detail is passed
   through; skills do not calculate widths themselves.
-- `RUNTIME_DEGRADED` — `cfq-runtime.sh` returned `status:"degraded"`: a usable fallback exists but
+- `RUNTIME_DEGRADED` — `cfq_runtime.py` returned `status:"degraded"`: a usable fallback exists but
   the primary Claude-Code interface failed structurally. The aggregator passes the adapter's own
   code/hint through unmodified in a `runtimeDiagnostic` field, never re-derives or hides it.
 
