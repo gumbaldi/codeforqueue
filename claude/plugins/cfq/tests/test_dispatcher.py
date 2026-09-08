@@ -30,7 +30,7 @@ class DispatcherTest(CfqTestCase):
         home1.mkdir()
         scan_env = {"HOME": str(home1), "CFQ_SCAN_ROOTS": "/nonexistent-scan-root"}
         a = self.run_clean(str(CFQ_BIN), "scan", env=scan_env)
-        b = self.run_clean("bash", str(SCRIPTS_DIR / "cfq-scan.sh"), env=scan_env)
+        b = self.run_clean("python3", str(SCRIPTS_DIR / "cfq_scan.py"), env=scan_env)
         self.assertEqual(a.stdout, b.stdout, msg="scan differs between dispatcher and direct call")
 
         home2 = self._repos_dir / "home2"

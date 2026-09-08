@@ -278,6 +278,27 @@ class ScanTest(CfqTestCase):
             "unknown --format value", proc.stderr, "unknown --format value should print a clear error"
         )
 
+    def test_registry_entry_with_missing_repo_path_does_not_crash(self):
+        # A repo the registry still knows about, but whose path is gone -- must not crash the
+        # scan and must not surface in the output (its .claude/cfq dir cannot be read either).
+        missing = str(self.tmp / "repo-vanished")
+        self.run_cfq("registry", "add", missing, check=True)
+        proc = self.run_cfq("scan", env={"CFQ_SCAN_ROOTS": "/nonexistent-scan-root-xyz"})
+        self.assertEqual(proc.returncode, 0, msg=f"scan should exit 0, stderr={proc.stderr}")
+        data = json.loads(proc.stdout)
+        self.assertNotIn(
+            missing, [r["path"] for r in data["repos"]],
+            msg="a repo with a missing path must not appear in the scan output",
+        )
+
+    def test_nonexistent_scan_root_does_not_crash(self):
+        # CFQ_SCAN_ROOTS pointing at a directory that doesn't exist at all -- still a valid,
+        # empty-ish result, never a crash.
+        proc = self.run_cfq("scan", env={"CFQ_SCAN_ROOTS": "/nonexistent-scan-root-xyz"})
+        self.assertEqual(proc.returncode, 0, msg=f"scan should exit 0, stderr={proc.stderr}")
+        data = json.loads(proc.stdout)
+        self.assertEqual(data.get("repos"), [], msg=f"expected no repos, got {data}")
+
 
 class ScanNextTest(CfqTestCase):
     """`bin/cfq scan --format=next` — the ranking `/ifq` would pick, moved out of

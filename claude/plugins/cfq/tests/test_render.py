@@ -36,7 +36,7 @@ class TestRender(CfqTestCase):
         return json_out, text
 
     def _dash_render_empty_registry(self):
-        # Fresh HOME, not self.home -- cfq-scan.sh registers every scanned repo into the
+        # Fresh HOME, not self.home -- cfq_scan.py registers every scanned repo into the
         # registry, so reusing self.home after another fixture's dash call would still find those
         # repos via the registry union, regardless of CFQ_SCAN_ROOTS.
         empty_home = self._repos_dir / "empty-registry-home"

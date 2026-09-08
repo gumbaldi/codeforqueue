@@ -38,8 +38,25 @@ class QueueOverlapTest(CfqTestCase):
             "## Affected Files\n\n- `/repo/should-not-appear.txt`\n"
         )
 
+        # batch-d's "## Affected Files" section is the last heading in the file -- no trailing
+        # "## " heading follows it, so the sed range's end pattern never matches and the
+        # extraction must run to end-of-file instead of yielding nothing.
+        batch_d = tmp / ".claude" / "cfq" / "impl" / "2026-01-01-batch-d"
+        batch_d.mkdir(parents=True)
+        (batch_d / "01-d.md").write_text(
+            "## Size\nS\n\n## Affected Files\n\n- `/repo/d-only.txt`\n- `/repo/d-second.txt`\n"
+        )
+
         proc = self.run_cfq("overlap", str(tmp))
         out = self.json_out(proc)
+
+        got_d = sorted(
+            next(b for b in out["batches"] if b["batch"] == "2026-01-01-batch-d")["files"]
+        )
+        self.assertEqual(
+            got_d, ["/repo/d-only.txt", "/repo/d-second.txt"],
+            msg=f"batch-d (Affected Files as last heading) files = {got_d}",
+        )
 
         got_a = sorted(
             next(b for b in out["batches"] if b["batch"] == "2026-01-01-batch-a")["files"]
@@ -59,7 +76,7 @@ class QueueOverlapTest(CfqTestCase):
         self.assertEqual(got_c, [], msg=f"batch-c files = {got_c}, want []")
 
         self.assertEqual(
-            len(out["batches"]), 3, msg=f"batches count = {len(out['batches'])}, want 3"
+            len(out["batches"]), 4, msg=f"batches count = {len(out['batches'])}, want 4"
         )
 
     def test_empty_repo_never_fails(self):

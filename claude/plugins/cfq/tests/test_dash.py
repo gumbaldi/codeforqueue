@@ -283,7 +283,7 @@ class TestDash(CfqTestCase):
         repo = tmp / "repo"
         self._plain_repo(repo)
         # A phase-less directory is enough to make `2026-05-02-target` structurally blocked
-        # (cfq-scan.sh only checks the path exists) without itself becoming an open candidate.
+        # (cfq_scan.py only checks the path exists) without itself becoming an open candidate.
         (repo / ".claude" / "cfq" / "impl" / "2026-05-01-dep").mkdir(parents=True)
         self._open_batch(repo, "2026-05-02-target", depends_on="2026-05-01-dep")
 

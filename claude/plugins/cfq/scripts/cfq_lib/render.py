@@ -11,6 +11,11 @@ def dump_json(obj):
     return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
 
 
+def dump_json_pretty(obj):
+    """2-space indented JSON, matching jq's default (non `-c`) pretty-print byte-for-byte."""
+    return json.dumps(obj, indent=2, ensure_ascii=False)
+
+
 def tostring(value):
     """Mirrors jq's `tostring` filter: a string passes through unquoted, everything else
     becomes its compact JSON form (numbers, bools and null included)."""

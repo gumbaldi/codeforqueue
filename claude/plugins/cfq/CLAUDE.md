@@ -5,11 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A Claude Code plugin, not an application: four skills (`skills/*/SKILL.md`) whose implementations
-live under `scripts/` — twelve of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
+live under `scripts/` — fourteen of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
 `cfq_doctor.py` ported as batch `014`; `cfq_layout.py`, `cfq_registry.py`, `cfq_park.py` ported as
 batch `017` phase 01; `cfq_lock.py`, `cfq_maintenance.py` ported as batch `017` phase 02;
 `cfq_runtime.py` ported as batch `017` phase 03; `ctx_usage.py`, `cfq_telemetry.py` ported as
-batch `017` phase 04) are stdlib Python, the remaining shell-shaped
+batch `017` phase 04; `cfq_scan.py`, `cfq_queue_overlap.py` ported as batch `017` phase 05) are
+stdlib Python, the remaining shell-shaped
 scripts stay shell; `bin/cfq`
 decides which interpreter to run by file extension, see Commands — plus one
 isolated migration utility (`scripts/migrations/`), eight TOML command aliases (`commands/`). No
@@ -62,11 +63,11 @@ is sourced by shell ones (`cfq_lib/paths.py` deliberately duplicates `cfq-paths.
 consistency test, `tests/test_layout.py`, until the last shell script sourcing it is ported — see
 Architecture). Two further exceptions stay direct filename calls, each commented at its call site:
 - **Inner-loop calls** (`cfq-batch-id.sh`'s per-pair rename and per-orphan reserve,
-  `cfq-scan.sh`'s per-repo registry-add and per-repo settings-get): a dispatcher exec resolves
+  `cfq_scan.py`'s per-repo registry-add and per-repo settings-get): a dispatcher exec resolves
   `../bin/cfq` fresh on every iteration, so the direct sibling call is the cheaper trade there.
-- **`cfq_report.py`'s internal call to `cfq-scan.sh`** (used by the `index` verb): `bin/cfq`
+- **`cfq_report.py`'s internal call to `cfq_scan.py`** (used by the `index` verb): `bin/cfq`
   resolves its `NOUN_SCRIPT` table relative to its own real location, so routing this call through
-  the dispatcher would always reach the real, unstubbed `cfq-scan.sh` — breaking the test double
+  the dispatcher would always reach the real, unstubbed `cfq_scan.py` — breaking the test double
   `tests/test_report.py` shadows it with. Stays a direct `SCRIPT_DIR` call for that reason.
 
 Any test double that copies `scripts/` to intercept a sibling call by filename (e.g.
@@ -106,8 +107,8 @@ that `implement-for-queue` writes, `code-for-queue` works off (Step C, current r
 session and per phase) and `.maintenance` (the maintenance-run marker) stay at the queue root, not
 inside any of the three subdirectories — `.lock` is held by the currently running
 `implement-for-queue` session, liveness derived from the holder's transcript mtime. There is no
-index or bookkeeping file: `cfq-scan.sh` counts live from disk every time, and "phase finished" *is*
-the `mv` into `impl/done/`. Anything that changes the layout must change `cfq-scan.sh` and
+index or bookkeeping file: `cfq_scan.py` counts live from disk every time, and "phase finished" *is*
+the `mv` into `impl/done/`. Anything that changes the layout must change `cfq_scan.py` and
 `tests/test_scan.py` together — and, for `report.json`, `tests/test_report.py` as well.
 It also changes an external contract: `PreToolUse` hooks on `Write`/`Edit` outside this repository
 key on these paths — see **Hook contract** in `README.md` before renaming anything here.
@@ -116,7 +117,7 @@ key on these paths — see **Hook contract** in `README.md` before renaming anyt
 own path — unrelated to and not renamed by the repo-local `.claude/cfq/` layout above): `repos.json`
 (registry of repos that ever had a queue, written by `cfq_registry.py add` from both worker skills),
 `settings.json` (the global settings tier, `cfq_settings.py`), and `state.json` (schema-less runtime
-state such as `setupDone`, `cfq_settings.py state get/set`). `cfq-scan.sh` unions the registry with a
+state such as `setupDone`, `cfq_settings.py state get/set`). `cfq_scan.py` unions the registry with a
 `find` over `scanRoots`, so a repo is discovered even if it was never registered.
 
 **Settings precedence is env > repo `.claude/cfq/settings.json` > global `settings.json` >
@@ -232,7 +233,7 @@ execution should re-run that comparison first, not take this paragraph on faith.
 
 ## Status Vocabulary
 
-Every read-only aggregator (`cfq-pfq-preflight.sh`, `cfq-ifq-preflight.sh`, `cfq-scan.sh
+Every read-only aggregator (`cfq-pfq-preflight.sh`, `cfq-ifq-preflight.sh`, `cfq_scan.py
 --format=`, `cfq_report.py index/detail`, `cfq_runtime.py plugins`, and any future one) reports a
 `status` field skills react to structurally, never by parsing prose. `status` is always exactly one
 of:

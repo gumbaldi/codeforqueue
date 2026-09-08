@@ -165,7 +165,7 @@ class TestReport(CfqTestCase):
             ],
         }))
 
-        # Call-counting stub for the N+1-regression guard: index must call cfq-scan.sh exactly
+        # Call-counting stub for the N+1-regression guard: index must call cfq_scan.py exactly
         # once, regardless of how many report-bearing batches exist. cfq_report.py resolves its
         # own SCRIPT_DIR from its own path, so the stub has to be invoked directly by path --
         # this is the one case in this file that cannot go through bin/cfq, since the dispatcher
@@ -177,10 +177,12 @@ class TestReport(CfqTestCase):
         (stub_dir / "cfq_report.py").write_bytes((scripts_dir / "cfq_report.py").read_bytes())
         shutil.copytree(scripts_dir / "cfq_lib", stub_dir / "cfq_lib")
         scan_calls.write_text("")
-        stub_scan = stub_dir / "cfq-scan.sh"
-        stub_scan.write_text(f"""#!/usr/bin/env bash
-echo x >>"{scan_calls}"
-exec bash "{scripts_dir / 'cfq-scan.sh'}" "$@"
+        stub_scan = stub_dir / "cfq_scan.py"
+        stub_scan.write_text(f"""#!/usr/bin/env python3
+import pathlib, subprocess, sys
+with open({str(scan_calls)!r}, "a") as fh:
+    fh.write("x\\n")
+sys.exit(subprocess.run(["python3", {str(scripts_dir / 'cfq_scan.py')!r}, *sys.argv[1:]]).returncode)
 """)
         stub_scan.chmod(0o755)
 
@@ -194,7 +196,7 @@ exec bash "{scripts_dir / 'cfq-scan.sh'}" "$@"
         self.assertEqual(len(idx), 3, f"index (no filter) length = {len(idx)}")
 
         calls = len(scan_calls.read_text().splitlines())
-        self.assertEqual(calls, 1, f"index should call cfq-scan.sh exactly once, got {calls}")
+        self.assertEqual(calls, 1, f"index should call cfq_scan.py exactly once, got {calls}")
 
         st_alpha = next(e["status"] for e in idx if e["batch"] == "2026-02-01-alpha")
         self.assertEqual(st_alpha, "GREEN", f"alpha status = {st_alpha}")
