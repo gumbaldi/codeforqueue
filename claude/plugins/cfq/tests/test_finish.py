@@ -15,7 +15,7 @@ from cfq_testlib import CfqTestCase
 class FinishTest(CfqTestCase):
     def _new_repo(self, name):
         # cfq-finish.sh diffs the changed-files check against a branch literally named "main"
-        # (cfq-lang.sh --changed main), so the fixture needs that branch regardless of this host's
+        # (cfq_lang.py --changed main), so the fixture needs that branch regardless of this host's
         # git init.defaultBranch.
         repo = self.make_repo(name)
         subprocess.run(["git", "-C", str(repo), "branch", "-M", "main"], check=True)
