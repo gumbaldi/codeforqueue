@@ -39,8 +39,8 @@ class BatchIdentityTest(CfqTestCase):
 
     def test_no_second_branch_version_increment_mechanism(self):
         self.assertIsNone(
-            grep(r"v\[0-9\]", SCRIPTS_DIR / "cfq-branch.sh"),
-            msg="cfq-branch.sh still contains vX.Y-style version-increment matching",
+            grep(r"v\[0-9\]", SCRIPTS_DIR / "cfq_branch.py"),
+            msg="cfq_branch.py still contains vX.Y-style version-increment matching",
         )
 
     def test_settings_json_never_excluded(self):

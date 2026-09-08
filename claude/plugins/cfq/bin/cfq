@@ -18,7 +18,7 @@ require_python() {
 # noun -> script, one script per noun, named for what it operates on rather than for the file.
 declare -A NOUN_SCRIPT=(
   [batch]=cfq_batch_id.py
-  [branch]=cfq-branch.sh
+  [branch]=cfq_branch.py
   [brief]=cfq_brief.py
   [changelog]=cfq_changelog.py
   [dash]=cfq-dash.sh

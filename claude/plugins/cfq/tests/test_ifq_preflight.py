@@ -1,7 +1,7 @@
 """Migrated from test-ifq-preflight.sh (scripts/cfq-ifq-preflight.sh).
 
-The stub renames `cfq-branch.sh` and shadows it by filename. When that script is ported to
-Python, this stub has to shadow `cfq_branch.py` instead — see batch `014` phase 02.
+The stub renames `cfq_branch.py` and shadows it by filename -- `cfq-branch.sh` was ported to
+Python in batch `017` phase 09 (see batch `014` phase 02 for the shadowing pattern itself).
 """
 
 import json
@@ -16,24 +16,26 @@ class IfqPreflightTest(CfqTestCase):
     def setUp(self):
         super().setUp()
         # Copies the whole scripts/ dir so cfq-ifq-preflight.sh's own script_dir resolution
-        # (and every sibling script it shells out to, e.g. cfq-resume.sh -> cfq-branch.sh)
-        # resolves inside the copy, then swaps cfq-branch.sh for a wrapper that logs every
+        # (and every sibling script it shells out to, e.g. cfq-resume.sh -> cfq_branch.py)
+        # resolves inside the copy, then swaps cfq_branch.py for a wrapper that logs every
         # invocation before delegating to the real binary. bin/ is copied alongside scripts/
         # (same relative layout as the real plugin) because internal sibling calls now route
         # through bin/cfq, which resolves its own NOUN_SCRIPT table relative to itself.
         self.scripts_copy = self._repos_dir / "scripts"
         shutil.copytree(PLUGIN_ROOT / "scripts", self.scripts_copy)
         shutil.copytree(PLUGIN_ROOT / "bin", self._repos_dir / "bin")
-        real = self.scripts_copy / "cfq-branch-real.sh"
-        (self.scripts_copy / "cfq-branch.sh").rename(real)
+        real = self.scripts_copy / "cfq_branch_real.py"
+        (self.scripts_copy / "cfq_branch.py").rename(real)
         self.count_log = self._repos_dir / "branch-calls.log"
         self.count_log.write_text("")
-        stub = self.scripts_copy / "cfq-branch.sh"
-        stub.write_text(f"""#!/usr/bin/env bash
-set -eu
-d="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
-echo call >> "{self.count_log}"
-exec "$d/cfq-branch-real.sh" "$@"
+        stub = self.scripts_copy / "cfq_branch.py"
+        stub.write_text(f"""#!/usr/bin/env python3
+import subprocess
+import sys
+
+with open({str(self.count_log)!r}, "a") as f:
+    f.write("call\\n")
+sys.exit(subprocess.run([sys.executable, {str(real)!r}] + sys.argv[1:]).returncode)
 """)
         stub.chmod(0o755)
         self.pf = self.scripts_copy / "cfq-ifq-preflight.sh"
@@ -74,7 +76,7 @@ exec "$d/cfq-branch-real.sh" "$@"
         out = self.json_out(self._run_pf(str(repo1)))
         self.assertEqual(out["status"], "OK", msg=f"continue-mode status = {out}")
         self.assertEqual(out["branch"]["mode"], "continue", msg=f"expected continue mode = {out}")
-        self.assertEqual(self._calls(), 1, msg=f"continue-mode cfq-branch.sh calls = {self._calls()}, want 1")
+        self.assertEqual(self._calls(), 1, msg=f"continue-mode cfq_branch.py calls = {self._calls()}, want 1")
         self.assertTrue(
             "implExploreModel" in out["policy"] and "implExploreModelComplex" in out["policy"],
             msg=f"policy missing implExploreModel/implExploreModelComplex: {out}",
@@ -98,10 +100,10 @@ exec "$d/cfq-branch-real.sh" "$@"
         branch = out["branch"]["branch"]
         self.run_clean("git", "-C", str(repo2), "checkout", "-q", "-b", branch)
         self.run_clean(
-            "bash", str(self.scripts_copy / "cfq-branch.sh"), "plan", str(repo2), "2026-01-01-fresh",
+            "python3", str(self.scripts_copy / "cfq_branch.py"), "plan", str(repo2), "2026-01-01-fresh",
             env={"HOME": str(self.home)},
         )
-        self.assertEqual(self._calls(), 2, msg=f"new-mode cfq-branch.sh calls = {self._calls()}, want 2")
+        self.assertEqual(self._calls(), 2, msg=f"new-mode cfq_branch.py calls = {self._calls()}, want 2")
 
     def test_selection_filters(self):
         repo3 = self._setup_repo("multi-repo")
