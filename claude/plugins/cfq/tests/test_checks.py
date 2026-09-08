@@ -1,6 +1,6 @@
 """Migrated from test-checks.sh.
 
-Self-test for scripts/cfq-lint.sh, scripts/cfq-security.sh, scripts/cfq-lang.sh and
+Self-test for scripts/cfq_lint.py, scripts/cfq-security.sh, scripts/cfq-lang.sh and
 scripts/cfq_maintenance.py, plus the commands/* short/long-form pairs.
 """
 

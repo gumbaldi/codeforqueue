@@ -338,7 +338,7 @@ def _tsv_field(v):
 
 def extract_goal(planfile):
     """First two non-empty lines after a `## Context` heading, truncated to 220 chars -- same
-    extraction as cfq-brief.sh's k/ctx/n logic, carried over verbatim."""
+    extraction as cfq_brief.py's k/ctx/n logic, carried over verbatim."""
     try:
         lines = pathlib.Path(planfile).read_text().splitlines()
     except OSError:

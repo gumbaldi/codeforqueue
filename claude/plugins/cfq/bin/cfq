@@ -19,14 +19,14 @@ require_python() {
 declare -A NOUN_SCRIPT=(
   [batch]=cfq_batch_id.py
   [branch]=cfq-branch.sh
-  [brief]=cfq-brief.sh
+  [brief]=cfq_brief.py
   [changelog]=cfq_changelog.py
   [dash]=cfq-dash.sh
   [doctor]=cfq_doctor.py
   [finish]=cfq-finish.sh
   [lang]=cfq-lang.sh
   [layout]=cfq_layout.py
-  [lint]=cfq-lint.sh
+  [lint]=cfq_lint.py
   [lock]=cfq_lock.py
   [maintenance]=cfq_maintenance.py
   [overlap]=cfq_queue_overlap.py
