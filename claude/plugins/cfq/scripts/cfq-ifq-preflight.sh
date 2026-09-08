@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Single read-only preflight aggregator for implement-for-queue's Steps 1-2 (model/plugin policy),
 # 3a (batch selection), 3b's read-only half (briefing) and 4a/4b (failed-attempt lookup, context
-# gate) — batches every cfq-settings.sh/cfq-scan.sh/cfq-brief.sh/cfq-resume.sh/cfq-report.sh
+# gate) — batches every cfq_settings.py/cfq_scan.py/cfq_brief.py/cfq_resume.py/cfq_report.py
 # last-failure/ctx_usage.py gate call the skill used to issue separately into one JSON object.
-# Mutations (cfq-lock.sh acquire, git checkout, cfq-changelog.sh init, and cfq-branch.sh plan's
+# Mutations (cfq_lock.py acquire, git checkout, cfq_changelog.py init, and cfq_branch.py plan's
 # post-checkout re-confirm on new-mode) stay explicit skill-level steps, never hidden in here — the
-# `branch` field below comes from cfq-resume.sh's own internal cfq-branch.sh call (one process
+# `branch` field below comes from cfq_resume.py's own internal cfq_branch.py call (one process
 # invocation total on the continue/off path), not a second direct call.
 # Usage: cfq-ifq-preflight.sh <repo-root> [--select <batch>]
 set -eu

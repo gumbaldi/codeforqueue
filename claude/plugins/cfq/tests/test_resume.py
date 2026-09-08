@@ -142,6 +142,85 @@ class ResumeTest(CfqTestCase):
         self.assertEqual(out["lastCommit"], tip, msg="legacy lastCommit")
         self.assertEqual(out["lastCommitSource"], "branch-tip", msg="legacy source")
 
+    def test_two_open_one_done(self):
+        # Routine: two open phases plus one already in done/ -- phasesOpen/phasesDone both
+        # populated in the same call, field by field.
+        batch = self.tmp / ".claude" / "cfq" / "impl" / "2026-01-04-tworeq"
+        (batch / "done").mkdir(parents=True)
+        (batch / "done" / "01-a.md").write_text("# T1\n\n## Size\n\nS\n")
+        (batch / "02-b.md").write_text("# T2\n\n## Size\n\nL\n")
+        (batch / "03-c.md").write_text("# T3\n")
+
+        proc = self.run_cfq("resume", str(self.tmp), str(batch))
+        out = self.json_out(proc)
+        self.assertEqual(
+            out["phasesOpen"],
+            [
+                {"num": "02", "slug": "02-b", "size": "L"},
+                {"num": "03", "slug": "03-c", "size": "M"},
+            ],
+            msg="two-open phasesOpen",
+        )
+        self.assertEqual(
+            out["phasesDone"],
+            [{"num": "01", "slug": "01-a", "commit": None}],
+            msg="two-open phasesDone, no report.json so no commit",
+        )
+
+    def test_planning_marker_is_ignored(self):
+        # A .planning marker does not change resume's own output -- filtering batches still
+        # planning is a batch-selection concern (cfq-ifq-preflight.sh), not resume's.
+        batch = self.tmp / ".claude" / "cfq" / "impl" / "2026-01-05-planning"
+        batch.mkdir(parents=True)
+        (batch / ".planning").write_text("")
+        (batch / "01-a.md").write_text("# T\n")
+
+        proc = self.run_cfq("resume", str(self.tmp), str(batch))
+        out = self.json_out(proc)
+        self.assertEqual(out["phasesOpen"], [{"num": "01", "slug": "01-a", "size": "M"}])
+
+    def test_empty_batch_dir_no_phase_files(self):
+        # Edge: the directory exists but holds no phase files at all -- both lists empty, no
+        # crash.
+        batch = self.tmp / ".claude" / "cfq" / "impl" / "2026-01-06-empty"
+        batch.mkdir(parents=True)
+
+        proc = self.run_cfq("resume", str(self.tmp), str(batch))
+        out = self.json_out(proc)
+        self.assertEqual(out["phasesOpen"], [], msg="empty phasesOpen")
+        self.assertEqual(out["phasesDone"], [], msg="empty phasesDone")
+        self.assertIsNone(out["lastCommit"], msg="empty lastCommit")
+        self.assertFalse(out["batchContext"]["exists"], msg="empty batchContext")
+
+    def test_nonexistent_batch_directory_fails(self):
+        # Failure: no such batch directory -- pins the exact plain-text message and exit code,
+        # whether or not the repo ever had a queue at all (both collapse to the same check).
+        missing = self.tmp / ".claude" / "cfq" / "impl" / "2026-01-07-nope"
+        proc = self.run_cfq("resume", str(self.tmp), str(missing))
+        self.assertEqual(proc.returncode, 1, msg="missing batch dir exit code")
+        self.assertIn(
+            f"no such batch directory: {missing}", proc.stderr,
+            msg=f"missing batch dir stderr: {proc.stderr!r}",
+        )
+
+    def test_no_queue_at_all_same_as_missing_batch(self):
+        # A repo that has never had a .claude/cfq directory at all behaves identically -- the
+        # check is purely "does this batch directory exist", nothing queue-specific.
+        bare = self._repos_dir / "bare"
+        bare.mkdir()
+        try:
+            git(bare, "init", "-q", "-b", "main")
+        except subprocess.CalledProcessError:
+            git(bare, "init", "-q")
+        missing = bare / ".claude" / "cfq" / "impl" / "2026-01-08-nope"
+
+        proc = self.run_cfq("resume", str(bare), str(missing))
+        self.assertEqual(proc.returncode, 1, msg="no-queue exit code")
+        self.assertIn(
+            f"no such batch directory: {missing}", proc.stderr,
+            msg=f"no-queue stderr: {proc.stderr!r}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

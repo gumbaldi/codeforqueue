@@ -5,14 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A Claude Code plugin, not an application: four skills (`skills/*/SKILL.md`) whose implementations
-live under `scripts/` — twenty of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
+live under `scripts/` — twenty-two of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
 `cfq_doctor.py` ported as batch `014`; `cfq_layout.py`, `cfq_registry.py`, `cfq_park.py` ported as
 batch `017` phase 01; `cfq_lock.py`, `cfq_maintenance.py` ported as batch `017` phase 02;
 `cfq_runtime.py` ported as batch `017` phase 03; `ctx_usage.py`, `cfq_telemetry.py` ported as
 batch `017` phase 04; `cfq_scan.py`, `cfq_queue_overlap.py` ported as batch `017` phase 05;
 `cfq_batch_id.py` ported as batch `017` phase 06; `cfq_brief.py`, `cfq_lint.py` ported as batch
 `017` phase 07; `cfq_lang.py`, `cfq_security.py` ported as batch `017` phase 08; `cfq_branch.py`
-ported as batch `017` phase 09) are
+ported as batch `017` phase 09; `cfq_resume.py`, `cfq_finish.py` ported as batch `017` phase 10) are
 stdlib Python, the remaining shell-shaped
 scripts stay shell; `bin/cfq`
 decides which interpreter to run by file extension, see Commands — plus one

@@ -16,7 +16,7 @@ class IfqPreflightTest(CfqTestCase):
     def setUp(self):
         super().setUp()
         # Copies the whole scripts/ dir so cfq-ifq-preflight.sh's own script_dir resolution
-        # (and every sibling script it shells out to, e.g. cfq-resume.sh -> cfq_branch.py)
+        # (and every sibling script it shells out to, e.g. cfq_resume.py -> cfq_branch.py)
         # resolves inside the copy, then swaps cfq_branch.py for a wrapper that logs every
         # invocation before delegating to the real binary. bin/ is copied alongside scripts/
         # (same relative layout as the real plugin) because internal sibling calls now route
