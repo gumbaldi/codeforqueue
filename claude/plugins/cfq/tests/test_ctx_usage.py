@@ -1,6 +1,6 @@
 """Migrated from test-ctx-usage.sh.
 
-Self-test for scripts/ctx-usage.sh: routine/boundary context-usage gate decisions, and the
+Self-test for scripts/ctx_usage.py: routine/boundary context-usage gate decisions, and the
 five-hour/seven-day rate-limit reasons layered on top of the capacity reason. Boundary
 percentages are exact numbers carried over unchanged from the Bash original, grouped into
 self.subTest(...) loops so every boundary case reports in one run instead of stopping at the

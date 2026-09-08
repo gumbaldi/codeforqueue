@@ -5,10 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A Claude Code plugin, not an application: four skills (`skills/*/SKILL.md`) whose implementations
-live under `scripts/` — ten of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
+live under `scripts/` — twelve of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
 `cfq_doctor.py` ported as batch `014`; `cfq_layout.py`, `cfq_registry.py`, `cfq_park.py` ported as
 batch `017` phase 01; `cfq_lock.py`, `cfq_maintenance.py` ported as batch `017` phase 02;
-`cfq_runtime.py` ported as batch `017` phase 03) are stdlib Python, the remaining shell-shaped
+`cfq_runtime.py` ported as batch `017` phase 03; `ctx_usage.py`, `cfq_telemetry.py` ported as
+batch `017` phase 04) are stdlib Python, the remaining shell-shaped
 scripts stay shell; `bin/cfq`
 decides which interpreter to run by file extension, see Commands — plus one
 isolated migration utility (`scripts/migrations/`), eight TOML command aliases (`commands/`). No
@@ -128,7 +129,7 @@ scope (`global` and/or `repo`), optional `env` mapping, description — every su
 there is no second hand-written case arm or table to keep in sync. `migrate <repo-root>` copies
 whatever the legacy per-repo `env` block (`<repo>/.claude/settings.json`) currently overrides into
 the new repo-scoped file, so that mechanism doesn't have to live forever. `stopUsed`
-is resolved by `ctx-usage.sh` through `bin/cfq settings get stopUsed`, same precedence chain as
+is resolved by `ctx_usage.py` through `bin/cfq settings get stopUsed`, same precedence chain as
 any other setting — anyone reworking that script breaks the precedence chain at exactly that
 point. The gate reports three verdicts and five reasons: capacity (`stopUsed`) always blocks
 (`HANDOFF`/`STOP`); a rate limit (`stopFiveHourPct`/`stopSevenDayPct`) or an unresolvable context
@@ -142,8 +143,8 @@ one exception that lives outside this schema entirely — it's runtime state, no
 through `cfq_settings.py state get/set` against a separate schema-less store instead.
 
 **`cfq_runtime.py` is the one Claude-Code-specific adapter.** Session id, transcript path, model
-name and context usage each used to be resolved independently in `ctx-usage.sh`, `cfq_lock.py` and
-`cfq-telemetry.sh`; all three now call `cfq_runtime.py transcript-path [--repo <path>] [--exact]`
+name and context usage each used to be resolved independently in `ctx_usage.py`, `cfq_lock.py` and
+`cfq_telemetry.py`; all three now call `cfq_runtime.py transcript-path [--repo <path>] [--exact]`
 and `cfq_runtime.py context` instead of re-deriving it. `context` prefers the statusline payload,
 falls back to parsing the transcript directly, and returns `status: "degraded"` (primary diagnostic
 preserved) rather than silently hiding it when the documented interface itself breaks structurally —
@@ -162,7 +163,7 @@ interpreter it needs to run. The bundled `SessionStart` hook (`bin/cfq doctor ho
 healthy host and warns both user and Claude only when a required command is missing — it never
 installs anything itself.
 
-**Telemetry is metadata only.** `cfq-telemetry.sh` derives everything from the running session's own
+**Telemetry is metadata only.** `cfq_telemetry.py` derives everything from the running session's own
 transcript (`cfq_runtime.py`'s path resolution, reused rather than reinvented) — never from a model's
 own estimate of its token usage. Only numbers, timestamps and names are carried into a record;
 `tests/test_telemetry.py` asserts this structurally (every leaf field name against a whitelist) so
@@ -185,7 +186,7 @@ continued one, addressed via `SendMessage`, keeps its context instead — see
 and the parent then reads the subagent's output again to verify it, two or three reads where a
 direct read-and-edit would have been one. That trade-off is measurable, not asserted: compare a
 subagent call's reported
-input-token count (`cfq-telemetry.sh`'s per-turn numbers) against the token cost of the parent
+input-token count (`cfq_telemetry.py`'s per-turn numbers) against the token cost of the parent
 reading and editing the same files directly — for implementation, test writing and documentation
 the subagent path loses. Anyone tempted to delegate anything beyond exploration or verification
 execution should re-run that comparison first, not take this paragraph on faith.
@@ -245,7 +246,7 @@ of:
 - `PLANNING` — batch still has its `.planning` marker, not implementation-ready.
 - `LOCKED` — another session holds the repo lock.
 - `DIRTY` — repo has uncommitted changes where a clean tree was required.
-- `UNKNOWN_CONTEXT` — context usage could not be resolved (mirrors `ctx-usage.sh`'s existing
+- `UNKNOWN_CONTEXT` — context usage could not be resolved (mirrors `ctx_usage.py`'s existing
   `UNKNOWN`, not a new concept — just the field name aggregators use in JSON).
 - `BATCH_WIDTH_MIGRATION_BLOCKED` — parking the next numbered batch would require a wider fixed
   width, but active CFQ queue work still exists. The batch-id helper's own action/detail is passed

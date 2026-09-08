@@ -40,8 +40,8 @@ declare -A NOUN_SCRIPT=(
   [scan]=cfq-scan.sh
   [security]=cfq-security.sh
   [settings]=cfq_settings.py
-  [telemetry]=cfq-telemetry.sh
-  [ctx]=ctx-usage.sh
+  [telemetry]=cfq_telemetry.py
+  [ctx]=ctx_usage.py
 )
 
 # First "# Usage: ..." comment in a script, or its first description comment line if none.

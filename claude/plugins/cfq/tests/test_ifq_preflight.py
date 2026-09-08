@@ -242,11 +242,11 @@ exec "$d/cfq-branch-real.sh" "$@"
         out = self.json_out(self._run_pf(str(repo9)))
         self.assertEqual(out["contextGate"]["size"], "M", msg=f"missing ## Size should default to M: {out}")
         direct_gate = self.run_clean(
-            "bash", str(self.scripts_copy / "ctx-usage.sh"), "gate", "M",
+            "python3", str(self.scripts_copy / "ctx_usage.py"), "gate", "M",
             env={"HOME": str(self.home)},
         ).stdout
         # The original Bash test only ever looked for START/HANDOFF here, silently missing WARN
-        # (the verdict ctx-usage.sh returns when no statusline payload/transcript is reachable
+        # (the verdict ctx_usage.py returns when no statusline payload/transcript is reachable
         # under an isolated $HOME, as in this sandbox) -- broadened to all three verdicts so the
         # comparison is meaningful regardless of whether a live payload is resolvable.
         direct_verdict = next(
@@ -254,7 +254,7 @@ exec "$d/cfq-branch-real.sh" "$@"
         )
         self.assertEqual(
             out["contextGate"]["verdict"], direct_verdict,
-            msg="contextGate.verdict != ctx-usage.sh gate's own verdict",
+            msg="contextGate.verdict != ctx_usage.py gate's own verdict",
         )
 
     def test_deterministic_and_read_only(self):

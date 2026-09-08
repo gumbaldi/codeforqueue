@@ -94,7 +94,7 @@ class DispatcherTest(CfqTestCase):
         # may be shell or Python (batch 014); scripts/cfq_lib/ is a package, not a command, and
         # a non-recursive glob already excludes it without needing to say so.
         text = CFQ_BIN.read_text()
-        pattern = re.compile(r"^\s*\[[a-z-]+\]=(cfq[a-z_-]+\.(?:sh|py)|ctx-usage\.sh)$", re.MULTILINE)
+        pattern = re.compile(r"^\s*\[[a-z-]+\]=(cfq[a-z_-]+\.(?:sh|py)|ctx_usage\.py)$", re.MULTILINE)
         mapped = sorted({m.group(1) for m in pattern.finditer(text)})
         on_disk = sorted(
             f.name

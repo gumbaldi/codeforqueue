@@ -2,7 +2,7 @@
 # Single read-only preflight aggregator for implement-for-queue's Steps 1-2 (model/plugin policy),
 # 3a (batch selection), 3b's read-only half (briefing) and 4a/4b (failed-attempt lookup, context
 # gate) — batches every cfq-settings.sh/cfq-scan.sh/cfq-brief.sh/cfq-resume.sh/cfq-report.sh
-# last-failure/ctx-usage.sh gate call the skill used to issue separately into one JSON object.
+# last-failure/ctx_usage.py gate call the skill used to issue separately into one JSON object.
 # Mutations (cfq-lock.sh acquire, git checkout, cfq-changelog.sh init, and cfq-branch.sh plan's
 # post-checkout re-confirm on new-mode) stay explicit skill-level steps, never hidden in here — the
 # `branch` field below comes from cfq-resume.sh's own internal cfq-branch.sh call (one process
@@ -111,7 +111,7 @@ if [ -n "$next" ]; then
   failed=$("$cfq" report last-failure "$batch_dir" "$next_slug")
   next_phase_json=$(jq -c --argjson f "$failed" '. + {failedAttempt: $f}' <<<"$next")
 
-  gate_line=$("$script_dir/ctx-usage.sh" gate "$next_size")
+  gate_line=$(python3 "$script_dir/ctx_usage.py" gate "$next_size")
   gate_json=$(jq -n --arg l "$gate_line" '
     ($l | try capture("^USED=(?<used>[^ ]+) SIZE=(?<size>[A-Z]) LIMIT=(?<limit>-?[0-9]+) (?<verdict>START|WARN|HANDOFF) REASON=(?<reason>[a-zA-Z]+) \\((?<note>.*)\\)$") catch null)
     | if . == null then null else
@@ -121,7 +121,7 @@ if [ -n "$next" ]; then
   if [ "$gate_json" = "null" ]; then
     jq -n --arg l "$gate_line" \
       '{status: "GATE_PARSE_FAILED", detail: $l,
-        action: "ctx-usage.sh emitted a gate line that does not match the expected USED/SIZE/LIMIT/verdict/REASON grammar; check ctx-usage.sh and cfq-ifq-preflight.sh for drift"}'
+        action: "ctx_usage.py emitted a gate line that does not match the expected USED/SIZE/LIMIT/verdict/REASON grammar; check ctx_usage.py and cfq-ifq-preflight.sh for drift"}'
     exit 1
   fi
 else
