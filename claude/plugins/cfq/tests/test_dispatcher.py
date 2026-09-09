@@ -99,11 +99,10 @@ class DispatcherTest(CfqTestCase):
         on_disk = sorted(
             f.name
             for f in list(SCRIPTS_DIR.glob("*.sh")) + list(SCRIPTS_DIR.glob("*.py"))
-            if f.name != "cfq-paths.sh"
         )
         self.assertEqual(
             mapped, on_disk,
-            msg="dispatcher routing table and scripts/*.sh + scripts/*.py (minus cfq-paths.sh) disagree",
+            msg="dispatcher routing table and scripts/*.sh + scripts/*.py disagree",
         )
 
         # Exactly one noun per script (no script mapped twice).

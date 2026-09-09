@@ -5,22 +5,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A Claude Code plugin, not an application: four skills (`skills/*/SKILL.md`) whose implementations
-live under `scripts/` — twenty-five of them (`cfq_settings.py`, `cfq_changelog.py`, `cfq_report.py`,
-`cfq_doctor.py` ported as batch `014`; `cfq_layout.py`, `cfq_registry.py`, `cfq_park.py` ported as
-batch `017` phase 01; `cfq_lock.py`, `cfq_maintenance.py` ported as batch `017` phase 02;
-`cfq_runtime.py` ported as batch `017` phase 03; `ctx_usage.py`, `cfq_telemetry.py` ported as
-batch `017` phase 04; `cfq_scan.py`, `cfq_queue_overlap.py` ported as batch `017` phase 05;
-`cfq_batch_id.py` ported as batch `017` phase 06; `cfq_brief.py`, `cfq_lint.py` ported as batch
-`017` phase 07; `cfq_lang.py`, `cfq_security.py` ported as batch `017` phase 08; `cfq_branch.py`
-ported as batch `017` phase 09; `cfq_resume.py`, `cfq_finish.py` ported as batch `017` phase 10;
-`cfq_pfq_preflight.py`, `cfq_ifq_preflight.py` ported as batch `017` phase 11; `cfq_dash.py`
-ported as batch `017` phase 12) are stdlib Python,
-the remaining shell-shaped
-scripts stay shell; `bin/cfq`
-decides which interpreter to run by file extension, see Commands — plus one
-isolated migration utility (`scripts/migrations/`), eight TOML command aliases (`commands/`). No
-build step, no package manager; every shell script hard-fails without `jq` except `cfq_doctor.py`
-itself, which is jq-free on purpose — see Architecture.
+live under `scripts/` — all of them stdlib Python (`cfq_settings.py`, `cfq_changelog.py`,
+`cfq_report.py`, `cfq_doctor.py` ported as batch `014`; `cfq_layout.py`, `cfq_registry.py`,
+`cfq_park.py` ported as batch `017` phase 01; `cfq_lock.py`, `cfq_maintenance.py` ported as batch
+`017` phase 02; `cfq_runtime.py` ported as batch `017` phase 03; `ctx_usage.py`,
+`cfq_telemetry.py` ported as batch `017` phase 04; `cfq_scan.py`, `cfq_queue_overlap.py` ported
+as batch `017` phase 05; `cfq_batch_id.py` ported as batch `017` phase 06; `cfq_brief.py`,
+`cfq_lint.py` ported as batch `017` phase 07; `cfq_lang.py`, `cfq_security.py` ported as batch
+`017` phase 08; `cfq_branch.py` ported as batch `017` phase 09; `cfq_resume.py`, `cfq_finish.py`
+ported as batch `017` phase 10; `cfq_pfq_preflight.py`, `cfq_ifq_preflight.py` ported as batch
+`017` phase 11; `cfq_dash.py` ported as batch `017` phase 12) — `bin/cfq` itself stays shell by
+design, see Commands — plus one isolated migration utility (`scripts/migrations/`, permanently
+shell, per batch `014`), eight TOML command aliases (`commands/`). No build step, no package
+manager; `bin/cfq doctor check` reports the host's dependency inventory (`bash`, `git`, `python3`
+required) — see Architecture.
 
 Reference files hold what would otherwise blow the 200-line budget of a `SKILL.md` (see
 Conventions): all of them live flat under `references/` (e.g. `doc-style.md`,
@@ -45,7 +43,7 @@ user's real registry and settings stay untouched:
 
 ```bash
 HOME=$(mktemp -d) claude/plugins/cfq/bin/cfq settings list
-HOME=$(mktemp -d) CFQ_SCAN_ROOTS=/some/fixture claude/plugins/cfq/bin/cfq scan | jq .
+HOME=$(mktemp -d) CFQ_SCAN_ROOTS=/some/fixture claude/plugins/cfq/bin/cfq scan | python3 -m json.tool
 claude/plugins/cfq/bin/cfq ctx        # read-only, safe as-is; must print PCT=<n> OK|STOP, never UNKNOWN
 ```
 
@@ -61,12 +59,9 @@ call site naming the script. `bin/cfq` itself picks the interpreter by extension
 noticing, which is the point.
 
 Scripts call each other through `bin/cfq <noun>`, never by filename — the same rule that applies
-to skills and references. `scripts/cfq-paths.sh` is the single sourced exception: it is sourced,
-not executed, and has no noun. `scripts/cfq_lib/` is a different kind of exception — shared Python
-with no CLI and no noun of its own, imported by `cfq_*.py` implementations the way `cfq-paths.sh`
-is sourced by shell ones (`cfq_lib/paths.py` deliberately duplicates `cfq-paths.sh` under a
-consistency test, `tests/test_layout.py`, until the last shell script sourcing it is ported — see
-Architecture). Two further exceptions stay direct filename calls, each commented at its call site:
+to skills and references. `scripts/cfq_lib/` is the one exception — shared Python with no CLI and
+no noun of its own, imported by `cfq_*.py` implementations (`cfq_lib/paths.py` holds the canonical
+path helpers). Two further exceptions stay direct filename calls, each commented at its call site:
 - **Inner-loop calls** (`cfq_batch_id.py`'s per-pair rename and per-orphan reserve,
   `cfq_scan.py`'s per-repo registry-add and per-repo settings-get): a dispatcher exec resolves
   `../bin/cfq` fresh on every iteration, so the direct sibling call is the cheaper trade there.
@@ -89,9 +84,9 @@ hands off on the context gate; `code-for-queue` is the cross-repo dashboard plus
 Behaviour lives in the SKILL.md prose — the scripts only supply numbers and state.
 
 **The queue is the filesystem, split into three queues** under `<repo>/.claude/cfq/` (canonical
-path/layout helpers: `cfq-paths.sh` — pure path functions, no I/O — and `cfq_layout.py`, which owns
-directory creation and the Git-state policy below; the previous repo-local layout is understood only
-by the isolated `scripts/migrations/cfq-layout-v1.sh` upgrade utility):
+path/layout helpers: `cfq_lib/paths.py` — pure path functions, no I/O — and `cfq_layout.py`, which
+owns directory creation and the Git-state policy below; the previous repo-local layout is
+understood only by the isolated `scripts/migrations/cfq-layout-v1.sh` upgrade utility):
 `impl/` holds the phase-plan batches (`<YYYY-MM-DD>-<topic>/NN-slug.md`, `.priority`
 (optional, present only when the batch is flagged and then contains exactly `high`), `.dependsOn`
 (optional, one batch directory name per line — blocks this batch
@@ -161,8 +156,8 @@ Claude Code runtime/statusline/plugin-cache representation change should only ev
 `cfq_runtime.py` (+ its tests/fixtures). If a change to any other aggregator is ever needed for
 such a change, that is itself a regression to fix, not an accepted cost.
 
-**`cfq_doctor.py` is the host dependency doctor**, deliberately jq-free (it's the one check every
-other script cannot perform on its own behalf) and reading a plain-text inventory
+**`cfq_doctor.py` is the host dependency doctor**, deliberately dependency-light itself (it's the
+one check every other script cannot perform on its own behalf) and reading a plain-text inventory
 (`config/dependencies.txt`: required / alternative / optional) — a missing `python3` itself is
 caught one layer down, by `bin/cfq`'s own `require_python` guard, since the doctor cannot report an
 interpreter it needs to run. The bundled `SessionStart` hook (`bin/cfq doctor hook`) is silent on a
