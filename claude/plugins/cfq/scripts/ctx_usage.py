@@ -82,7 +82,7 @@ def main(argv):
     seven_day_pct = rate_limits.get("sevenDayPct")
 
     # Cache share and rate-limit percentages are appended to the note as display info regardless
-    # of the decision below; the note must stay parenthesis-free (cfq-ifq-preflight.sh's capture
+    # of the decision below; the note must stay parenthesis-free (cfq_ifq_preflight.py's capture
     # is greedy to the final `)`).
     if cache_read is not None and used is not None and used > 0:
         note = f"{note}, cache {cache_read * 100 // used}%"

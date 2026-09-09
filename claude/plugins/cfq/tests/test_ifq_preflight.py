@@ -1,4 +1,5 @@
-"""Migrated from test-ifq-preflight.sh (scripts/cfq-ifq-preflight.sh).
+"""Migrated from test-ifq-preflight.sh (scripts/cfq_ifq_preflight.py, ported from
+cfq-ifq-preflight.sh in batch `017` phase 11).
 
 The stub renames `cfq_branch.py` and shadows it by filename -- `cfq-branch.sh` was ported to
 Python in batch `017` phase 09 (see batch `014` phase 02 for the shadowing pattern itself).
@@ -15,7 +16,7 @@ from cfq_testlib import CfqTestCase, PLUGIN_ROOT
 class IfqPreflightTest(CfqTestCase):
     def setUp(self):
         super().setUp()
-        # Copies the whole scripts/ dir so cfq-ifq-preflight.sh's own script_dir resolution
+        # Copies the whole scripts/ dir so cfq_ifq_preflight.py's own script_dir resolution
         # (and every sibling script it shells out to, e.g. cfq_resume.py -> cfq_branch.py)
         # resolves inside the copy, then swaps cfq_branch.py for a wrapper that logs every
         # invocation before delegating to the real binary. bin/ is copied alongside scripts/
@@ -38,11 +39,11 @@ with open({str(self.count_log)!r}, "a") as f:
 sys.exit(subprocess.run([sys.executable, {str(real)!r}] + sys.argv[1:]).returncode)
 """)
         stub.chmod(0o755)
-        self.pf = self.scripts_copy / "cfq-ifq-preflight.sh"
+        self.pf = self.scripts_copy / "cfq_ifq_preflight.py"
 
     def _run_pf(self, *args, home=None):
         return self.run_clean(
-            "bash", str(self.pf), *args,
+            "python3", str(self.pf), *args,
             env={"HOME": str(home if home is not None else self.home)},
         )
 

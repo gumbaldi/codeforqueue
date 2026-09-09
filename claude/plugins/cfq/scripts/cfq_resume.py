@@ -5,7 +5,7 @@ facts read from disk, report.json, and git. Called unconditionally at Step 3b, f
 resumed alike -- same call, same shape either way.
 
 Ported from cfq-resume.sh -- a port, not a redesign: the CLI contract (output keys, plain-text
-error, exit codes) is the invariant this file preserves. `cfq-ifq-preflight.sh:102` parses this
+error, exit codes) is the invariant this file preserves. `cfq_ifq_preflight.py:102` parses this
 output verbatim, including the nested `branch` object from its own internal `branch plan` call.
 """
 

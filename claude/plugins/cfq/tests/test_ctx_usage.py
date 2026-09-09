@@ -258,7 +258,7 @@ class TestCtxUsage(CfqTestCase):
         self.assertIn("7d 10%", out, out)
 
     def test_gate_line_matches_ifq_preflight_capture_regex(self):
-        # Same jq capture(...) expression as cfq-ifq-preflight.sh, copied here so the two cannot
+        # Same capture regex as cfq_ifq_preflight.py, copied here so the two cannot
         # drift apart.
         self._write_payload(
             '{"context_window":{"used_percentage":19,"context_window_size":1000000,'

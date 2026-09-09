@@ -169,7 +169,7 @@ class ResumeTest(CfqTestCase):
 
     def test_planning_marker_is_ignored(self):
         # A .planning marker does not change resume's own output -- filtering batches still
-        # planning is a batch-selection concern (cfq-ifq-preflight.sh), not resume's.
+        # planning is a batch-selection concern (cfq_ifq_preflight.py), not resume's.
         batch = self.tmp / ".claude" / "cfq" / "impl" / "2026-01-05-planning"
         batch.mkdir(parents=True)
         (batch / ".planning").write_text("")

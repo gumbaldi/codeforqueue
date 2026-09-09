@@ -15,7 +15,7 @@ next: one object per repo -- { path, next, reason, blocked, planning } -- next i
 multipleInProgress/null, blocked/planning are arrays of batch names. This is the one place the
 `/ifq` selection ranking (non-archived, open>0, planning/blocked drop out, a single inProgress
 batch wins, otherwise flagged priority first then name) is decided -- see
-cfq-ifq-preflight.sh, which consumes this format rather than re-deciding the ranking itself.
+cfq_ifq_preflight.py, which consumes this format rather than re-deciding the ranking itself.
 
 Ported from cfq-scan.sh -- a port, not a redesign: the CLI contract (verbs, argument order, text
 output, exit codes) is the invariant this file preserves.

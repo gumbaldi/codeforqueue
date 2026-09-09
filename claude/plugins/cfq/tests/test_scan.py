@@ -302,7 +302,7 @@ class ScanTest(CfqTestCase):
 
 class ScanNextTest(CfqTestCase):
     """`bin/cfq scan --format=next` — the ranking `/ifq` would pick, moved out of
-    cfq-ifq-preflight.sh so `/cfq`'s dashboard can show the same answer."""
+    cfq_ifq_preflight.py so `/cfq`'s dashboard can show the same answer."""
 
     def setUp(self):
         super().setUp()

@@ -1,4 +1,5 @@
-"""Migrated from test-pfq-preflight.sh (scripts/cfq-pfq-preflight.sh).
+"""Migrated from test-pfq-preflight.sh (scripts/cfq_pfq_preflight.py, ported from
+cfq-pfq-preflight.sh in batch `017` phase 11).
 
 The stub renames `cfq_settings.py` and shadows it by filename — batch `014` phase 02 ported
 settings to Python, so the stub is a Python script now too (the dispatcher invokes `.py` files
@@ -17,7 +18,7 @@ from cfq_testlib import CfqTestCase, PLUGIN_ROOT
 class PfqPreflightTest(CfqTestCase):
     def setUp(self):
         super().setUp()
-        # Copies the whole scripts/ dir so cfq-pfq-preflight.sh's own script_dir resolution (and
+        # Copies the whole scripts/ dir so cfq_pfq_preflight.py's own script_dir resolution (and
         # every sibling script it shells out to, e.g. cfq_maintenance.py) resolves inside the
         # copy, then swaps cfq_settings.py for a wrapper that logs every subcommand before
         # delegating to the real module. bin/ is copied alongside scripts/ (same relative layout
@@ -41,13 +42,13 @@ with open({str(self.count_log)!r}, "a") as f:
     f.write((sys.argv[1] if len(sys.argv) > 1 else "") + "\\n")
 sys.exit(subprocess.run([sys.executable, str(d / "cfq_settings_real.py"), *sys.argv[1:]]).returncode)
 """)
-        self.pf = self.scripts_copy / "cfq-pfq-preflight.sh"
+        self.pf = self.scripts_copy / "cfq_pfq_preflight.py"
 
     def _run_pf(self, *args, env=None):
         run_env = {"HOME": str(self.home)}
         if env:
             run_env.update(env)
-        return self.run_clean("bash", str(self.pf), *args, env=run_env)
+        return self.run_clean("python3", str(self.pf), *args, env=run_env)
 
     def test_fresh_unregistered_repo(self):
         fresh = self._repos_dir / "fresh"
