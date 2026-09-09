@@ -1,6 +1,6 @@
 {
   "name": "cfq",
-  "version": "0.9.9",
+  "version": "0.10.0",
   "description": "code-for-queue (cfq) — plan with an expensive model, implement with a cheap one. Park phased plans in a repo-local queue, work them off one batch per session, and see every queue at a glance.",
   "author": {
     "name": "gumbaldi",
