@@ -1,6 +1,6 @@
 """Migrated from test-render.sh.
 
-Self-test for the render modes: scripts/cfq-dash.sh's `render` mode and
+Self-test for the render modes: scripts/cfq_dash.py's `render` mode and
 scripts/cfq_report.py's `index --text` mode. Both are additive terminal renders over the same
 JSON the default invocation returns -- this file pins that one-code-path guarantee explicitly.
 """

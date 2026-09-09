@@ -1,6 +1,6 @@
 """Migrated from test-dash.sh.
 
-Self-test for scripts/cfq-dash.sh: repo rollup, thisRepo scoping, the settings marker
+Self-test for scripts/cfq_dash.py: repo rollup, thisRepo scoping, the settings marker
 mapping (default/global/repo/env source and masked-value display), and the `THIS REPO` render
 block (open-batches-only, `--all`, and the expanded next batch).
 """
@@ -67,7 +67,7 @@ class TestDash(CfqTestCase):
         tmp = self._repos_dir / "dashroot"
 
         # repo-a: registered, one open batch (high priority, 1 open + 1 done phase). A real git
-        # repo so cfq-dash.sh's git rev-parse resolves it as "this repo" when cwd is inside it.
+        # repo so cfq_dash.py's git rev-parse resolves it as "this repo" when cwd is inside it.
         repo_a = tmp / "repo-a"
         (repo_a / ".claude" / "cfq" / "impl" / "2026-01-01-demo" / "done").mkdir(parents=True)
         self._plain_repo(repo_a)
