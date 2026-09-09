@@ -338,7 +338,7 @@ def _tsv_field(v):
 
 def extract_goal(planfile):
     """First two non-empty lines after a `## Context` heading, truncated to 220 chars -- same
-    extraction as cfq-brief.sh's k/ctx/n logic, carried over verbatim."""
+    extraction as cfq_brief.py's k/ctx/n logic, carried over verbatim."""
     try:
         lines = pathlib.Path(planfile).read_text().splitlines()
     except OSError:
@@ -514,10 +514,10 @@ def cmd_html(args):
 # ---- verbs: index / detail -------------------------------------------------------------------
 
 def run_scan():
-    # Direct sibling call, not the dispatcher: cfq_report.py resolves cfq-scan.sh relative to
-    # its own real location, which would bypass a test double that shadows cfq-scan.sh in a copy
+    # Direct sibling call, not the dispatcher: cfq_report.py resolves cfq_scan.py relative to
+    # its own real location, which would bypass a test double that shadows cfq_scan.py in a copy
     # of this script's directory (see tests/test_report.py's index/scan-count test).
-    out = subprocess.run([str(SCRIPT_DIR / "cfq-scan.sh")], capture_output=True, text=True)
+    out = subprocess.run(["python3", str(SCRIPT_DIR / "cfq_scan.py")], capture_output=True, text=True)
     return json.loads(out.stdout)
 
 

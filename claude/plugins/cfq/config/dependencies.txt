@@ -1,18 +1,16 @@
-# Canonical dependency inventory for cfq, parsed line-wise by cfq_doctor.py — no jq, since jq is
-# itself one of the rows below. bin/cfq's own python3 guard is what reports a missing interpreter
-# before cfq_doctor.py can even run, at the layer beneath any Python; the python3 row here is what
-# cfq_doctor.py itself reports once it's running.
+# Canonical dependency inventory for cfq, parsed line-wise by cfq_doctor.py. bin/cfq's own
+# python3 guard is what reports a missing interpreter before cfq_doctor.py can even run, at the
+# layer beneath any Python; the python3 row here is what cfq_doctor.py itself reports once it's
+# running.
 # Format: name(s)|kind|short reason. Comma-separated names in "alternative" rows are equivalent
 # choices (first found wins). kind is one of: required, alternative, optional.
 #
 # required: hard-fails every mandatory cfq path when missing.
 # alternative: at least one of the comma-separated names must be present.
 # optional: a capability/provider; its absence degrades one feature, never blocks the plugin.
-bash|required|shell interpreter every cfq script runs under
+bash|required|shell interpreter bin/cfq and the migration utility run under
 git|required|branch, commit and diff operations in most scripts
-jq|required|JSON read/write in every script except cfq-doctor.sh itself
-python3|required|runs the ported implementations (settings, changelog, report, doctor)
-timeout,gtimeout|alternative|bounds network calls in cfq-security.sh (gtimeout on stock macOS)
-gh|optional|GitHub security-finding lookups (Dependabot/code-scanning) in cfq-security.sh
-tea|optional|Gitea security-finding lookups in cfq-security.sh
-npm|optional|npm audit for repos with a package.json in cfq-security.sh
+python3|required|runs the ported implementations
+gh|optional|GitHub security-finding lookups (Dependabot/code-scanning) in cfq_security.py
+tea|optional|Gitea security-finding lookups in cfq_security.py
+npm|optional|npm audit for repos with a package.json in cfq_security.py

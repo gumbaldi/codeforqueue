@@ -35,7 +35,7 @@ SCHEMA = {
     "planExploreModel": {"type": "string", "default": "haiku", "scope": ["global", "repo"], "env": "CFQ_PLAN_EXPLORE_MODEL", "description": "Model used for /pfq exploratory sub-agent research."},
     "implExploreModel": {"type": "string", "default": "haiku", "scope": ["global", "repo"], "env": "CFQ_IMPL_EXPLORE_MODEL", "description": "Model used for /ifq exploratory sub-agent research and mechanical test-run delegation."},
     "allowAnyModel": {"type": "bool", "default": False, "scope": ["global", "repo"], "env": "CFQ_ALLOW_ANY_MODEL", "description": "Skip the implModels/planModels gate entirely."},
-    "scanRoots": {"type": "array", "default": ["~/git"], "scope": ["global"], "env": "CFQ_SCAN_ROOTS", "description": "Root directories cfq-scan.sh searches for repos with a queue."},
+    "scanRoots": {"type": "array", "default": ["~/git"], "scope": ["global"], "env": "CFQ_SCAN_ROOTS", "description": "Root directories cfq_scan.py searches for repos with a queue."},
     "useMattpocockGrilling": {"type": "bool", "default": True, "scope": ["global", "repo"], "env": "CFQ_USE_MATTPOCOCK", "description": "Use the mattpocock-skills grilling skill instead of the built-in one, when installed."},
     "usePonytailAudit": {"type": "bool", "default": True, "scope": ["global", "repo"], "env": "CFQ_USE_PONYTAIL", "description": "Run the optional ponytail-audit cleanup task during maintenance."},
     "codeLanguage": {"type": "string", "default": "en", "pattern": "^[A-Za-z][A-Za-z-]*$", "scope": ["global", "repo"], "env": "CFQ_CODE_LANGUAGE", "description": "Language of everything executed or read as an instruction: code, comments, commit messages, README, CLAUDE.md, SKILL.md."},

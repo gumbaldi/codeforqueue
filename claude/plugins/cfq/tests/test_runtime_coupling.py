@@ -12,10 +12,10 @@ from cfq_testlib import SCRIPTS_DIR, CfqTestCase
 
 # cfq-runtime.sh itself is the one allowed adapter and is deliberately excluded here.
 FILES = [
-    SCRIPTS_DIR / "cfq-pfq-preflight.sh",
-    SCRIPTS_DIR / "cfq-ifq-preflight.sh",
+    SCRIPTS_DIR / "cfq_pfq_preflight.py",
+    SCRIPTS_DIR / "cfq_ifq_preflight.py",
     SCRIPTS_DIR / "cfq_report.py",
-    SCRIPTS_DIR / "cfq-scan.sh",
+    SCRIPTS_DIR / "cfq_scan.py",
 ]
 
 FORBIDDEN = re.compile(r"CLAUDE_CODE_SESSION_ID|\.claude/\.ctx|\.claude/projects")

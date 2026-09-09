@@ -1,6 +1,6 @@
 """Migrated from test-render.sh.
 
-Self-test for the render modes: scripts/cfq-dash.sh's `render` mode and
+Self-test for the render modes: scripts/cfq_dash.py's `render` mode and
 scripts/cfq_report.py's `index --text` mode. Both are additive terminal renders over the same
 JSON the default invocation returns -- this file pins that one-code-path guarantee explicitly.
 """
@@ -36,7 +36,7 @@ class TestRender(CfqTestCase):
         return json_out, text
 
     def _dash_render_empty_registry(self):
-        # Fresh HOME, not self.home -- cfq-scan.sh registers every scanned repo into the
+        # Fresh HOME, not self.home -- cfq_scan.py registers every scanned repo into the
         # registry, so reusing self.home after another fixture's dash call would still find those
         # repos via the registry union, regardless of CFQ_SCAN_ROOTS.
         empty_home = self._repos_dir / "empty-registry-home"
@@ -150,8 +150,10 @@ class TestRender(CfqTestCase):
         self.assertIn("⚠️ Plugins", pony_text, f"ponytail mode warning should force the ⚠️ icon:\n{pony_text}")
 
     def test_dash_render_ponytail_off_mode_no_warning(self):
+        # `off` is ponytail's expected, configured state -- the mode clause vanishes entirely
+        # rather than printing a redundant "mode: off" (see test_dash.py's plugins-line coverage).
         pony_off_text = self._dash_render_ponytail_off()
-        self.assertIn("mode: off", pony_off_text, f"ponytail off mode not surfaced:\n{pony_off_text}")
+        self.assertNotIn("mode:", pony_off_text, f"mode clause should vanish when ponytailMode is off:\n{pony_off_text}")
         self.assertNotIn("cfq expects off", pony_off_text, "mode off should not carry a warning")
 
     def test_report_index_text_red_row_zero_cost_equivalence(self):

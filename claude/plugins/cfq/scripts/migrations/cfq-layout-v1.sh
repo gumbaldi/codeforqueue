@@ -22,7 +22,7 @@ new_root() { printf '%s/.claude/cfq' "$1"; }
 # broad `.claude/` parse.
 discover() {
   local current="${1:-}" repos=""
-  repos=$("$scripts_dir/cfq-registry.sh" list 2>/dev/null || true)
+  repos=$(python3 "$scripts_dir/cfq_registry.py" list 2>/dev/null || true)
   [ -n "$current" ] && repos="$repos
 $current"
 
@@ -165,7 +165,7 @@ case "$cmd" in
       results=$(jq --argjson r "$(emit_repo_json "$repo")" '. + [$r]' <<<"$results")
     done < <(discover "$current")
     if [ "$cmd" = "apply" ]; then
-      "$scripts_dir/cfq-registry.sh" prune >/dev/null 2>&1 || true
+      python3 "$scripts_dir/cfq_registry.py" prune >/dev/null 2>&1 || true
     fi
     jq -n --argjson repos "$results" '{repos: $repos}'
     ;;

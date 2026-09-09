@@ -6,16 +6,18 @@ disabled or no planning snapshot exists, and gate report.html rendering on htmlR
 """
 
 import json
+import shutil
 import subprocess
+import sys
 import unittest
 
-from cfq_testlib import CfqTestCase
+from cfq_testlib import CfqTestCase, PLUGIN_ROOT, SCRIPTS_DIR
 
 
 class FinishTest(CfqTestCase):
     def _new_repo(self, name):
         # cfq-finish.sh diffs the changed-files check against a branch literally named "main"
-        # (cfq-lang.sh --changed main), so the fixture needs that branch regardless of this host's
+        # (cfq_lang.py --changed main), so the fixture needs that branch regardless of this host's
         # git init.defaultBranch.
         repo = self.make_repo(name)
         subprocess.run(["git", "-C", str(repo), "branch", "-M", "main"], check=True)
@@ -164,6 +166,128 @@ class FinishTest(CfqTestCase):
             (repo / ".claude/cfq/impl/done/2026-01-01-htmloff/report.html").exists(),
             "default htmlReport=false must not auto-render report.html",
         )
+
+    def test_already_in_impl_done_completes_normally(self):
+        # Edge: the batch directory handed in is already inside impl/done/ (batch_dir == moved)
+        # -- the move is skipped, the rest of the sequence runs against it in place.
+        home = self._repos_dir / "home7"
+        home.mkdir()
+        repo = self._new_repo("repo7")
+        done_dir = repo / ".claude/cfq/impl/done"
+        batch = done_dir / "2026-01-01-alreadydone"
+        (batch / "done").mkdir(parents=True)
+        (batch / "done" / "01-a.md").write_text("# A phase\n")
+        self.run_cfq(
+            "lock", "acquire", str(repo), "2026-01-01-alreadydone", home=home, check=True,
+        )
+
+        out = self.json_out(
+            self.run_cfq(
+                "finish", str(repo), str(batch), "v0.1-alreadydone", home=home, check=True,
+            )
+        )
+        self.assertTrue(batch.is_dir(), f"batch should still be in place: {out}")
+        self.assertEqual(out["lock"], "released", f"lock field: {out}")
+        lockstatus = self.run_cfq("lock", "status", str(repo), home=home).stdout.strip()
+        self.assertEqual(lockstatus, "FREE", f"lock not released: {lockstatus}")
+
+    def test_hard_failure_before_move_still_releases_lock(self):
+        # The trap, made explicit: a failure so early the sequence never even produces JSON on
+        # stdout must still release the lock -- the counterpart to
+        # test_mid_sequence_changelog_failure_still_completes, which asserts the sequence
+        # *completes* despite a failure. This one asserts the lock guarantee holds even when it
+        # does not complete at all.
+        home = self._repos_dir / "home8"
+        home.mkdir()
+        repo = self._new_repo("repo8")
+        batch = self._new_batch(repo, "2026-01-01-hardfail")
+        self.run_cfq(
+            "lock", "acquire", str(repo), "2026-01-01-hardfail", home=home, check=True,
+        )
+
+        impl_dir = repo / ".claude/cfq/impl"
+        impl_dir.chmod(0o555)
+        try:
+            proc = self.run_cfq(
+                "finish", str(repo), str(batch), "v0.1-hardfail", home=home,
+            )
+        finally:
+            impl_dir.chmod(0o755)
+
+        self.assertNotEqual(proc.returncode, 0, f"expected a hard failure: {proc.stdout!r}")
+        lockstatus = self.run_cfq("lock", "status", str(repo), home=home).stdout.strip()
+        self.assertEqual(
+            lockstatus, "FREE", f"lock not released after a hard failure: {lockstatus}",
+        )
+
+    def test_nine_subcalls_run_in_expected_order(self):
+        # Order: cfq-finish.sh runs its nine sub-nouns as a sequence where later steps depend on
+        # earlier state -- wrap each with a logging shim and assert their first-occurrence order.
+        home = self._repos_dir / "home9"
+        home.mkdir()
+        repo = self._new_repo("repo9")
+        batch = self._new_batch(repo, "2026-01-01-order")
+        self.run_cfq("lock", "acquire", str(repo), "2026-01-01-order", home=home, check=True)
+
+        scripts_copy = self._repos_dir / "scripts"
+        shutil.copytree(SCRIPTS_DIR, scripts_copy)
+        bin_copy = self._repos_dir / "bin"
+        shutil.copytree(PLUGIN_ROOT / "bin", bin_copy)
+
+        log_file = self._repos_dir / "order.log"
+        log_file.write_text("")
+        noun_to_script = {
+            "registry": "cfq_registry.py",
+            "lang": "cfq_lang.py",
+            "maintenance": "cfq_maintenance.py",
+            "security": "cfq_security.py",
+            "report": "cfq_report.py",
+            "settings": "cfq_settings.py",
+            "changelog": "cfq_changelog.py",
+            "telemetry": "cfq_telemetry.py",
+            "lock": "cfq_lock.py",
+        }
+        for noun, script_name in noun_to_script.items():
+            orig = scripts_copy / script_name
+            real = scripts_copy / script_name.replace(".py", "_real.py")
+            orig.rename(real)
+            orig.write_text(f"""#!/usr/bin/env python3
+import subprocess
+import sys
+
+with open({str(log_file)!r}, "a") as f:
+    f.write({noun!r} + " " + " ".join(sys.argv[1:]) + "\\n")
+sys.exit(subprocess.run([sys.executable, {str(real)!r}] + sys.argv[1:]).returncode)
+""")
+            orig.chmod(0o755)
+
+        run_env = self._base_env()
+        run_env["HOME"] = str(home)
+        proc = subprocess.run(
+            [str(bin_copy / "cfq"), "finish", str(repo), str(batch), "v0.1-order"],
+            capture_output=True, text=True, env=run_env,
+        )
+        self.assertEqual(proc.returncode, 0, f"finish via copy failed: {proc.stderr}")
+
+        # `settings` is used internally by nearly every other script (to read its own config),
+        # so its first log line is not necessarily cfq-finish.sh's own direct call -- only its
+        # two direct calls (changelogFile, htmlReport) carry those exact argument tails.
+        calls = [line for line in log_file.read_text().splitlines() if line]
+        first_index = {}
+        for i, line in enumerate(calls):
+            noun = line.split(" ", 1)[0]
+            if noun == "settings" and not line.endswith("changelogFile") \
+                    and not line.endswith("htmlReport"):
+                continue
+            first_index.setdefault(noun, i)
+        expected = [
+            "registry", "lang", "maintenance", "security", "report", "settings", "changelog",
+            "telemetry", "lock",
+        ]
+        for noun in expected:
+            self.assertIn(noun, first_index, f"{noun} never directly called: {calls}")
+        actual_order = sorted(expected, key=lambda n: first_index[n])
+        self.assertEqual(actual_order, expected, f"call order mismatch, raw log: {calls}")
 
 
 if __name__ == "__main__":

@@ -17,31 +17,31 @@ require_python() {
 
 # noun -> script, one script per noun, named for what it operates on rather than for the file.
 declare -A NOUN_SCRIPT=(
-  [batch]=cfq-batch-id.sh
-  [branch]=cfq-branch.sh
-  [brief]=cfq-brief.sh
+  [batch]=cfq_batch_id.py
+  [branch]=cfq_branch.py
+  [brief]=cfq_brief.py
   [changelog]=cfq_changelog.py
-  [dash]=cfq-dash.sh
+  [dash]=cfq_dash.py
   [doctor]=cfq_doctor.py
-  [finish]=cfq-finish.sh
-  [lang]=cfq-lang.sh
-  [layout]=cfq-layout.sh
-  [lint]=cfq-lint.sh
-  [lock]=cfq-lock.sh
-  [maintenance]=cfq-maintenance.sh
-  [overlap]=cfq-queue-overlap.sh
-  [park]=cfq-park.sh
-  [preflight-plan]=cfq-pfq-preflight.sh
-  [preflight-impl]=cfq-ifq-preflight.sh
-  [registry]=cfq-registry.sh
+  [finish]=cfq_finish.py
+  [lang]=cfq_lang.py
+  [layout]=cfq_layout.py
+  [lint]=cfq_lint.py
+  [lock]=cfq_lock.py
+  [maintenance]=cfq_maintenance.py
+  [overlap]=cfq_queue_overlap.py
+  [park]=cfq_park.py
+  [preflight-plan]=cfq_pfq_preflight.py
+  [preflight-impl]=cfq_ifq_preflight.py
+  [registry]=cfq_registry.py
   [report]=cfq_report.py
-  [resume]=cfq-resume.sh
-  [runtime]=cfq-runtime.sh
-  [scan]=cfq-scan.sh
-  [security]=cfq-security.sh
+  [resume]=cfq_resume.py
+  [runtime]=cfq_runtime.py
+  [scan]=cfq_scan.py
+  [security]=cfq_security.py
   [settings]=cfq_settings.py
-  [telemetry]=cfq-telemetry.sh
-  [ctx]=ctx-usage.sh
+  [telemetry]=cfq_telemetry.py
+  [ctx]=ctx_usage.py
 )
 
 # First "# Usage: ..." comment in a script, or its first description comment line if none.

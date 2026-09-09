@@ -30,7 +30,7 @@ class DispatcherTest(CfqTestCase):
         home1.mkdir()
         scan_env = {"HOME": str(home1), "CFQ_SCAN_ROOTS": "/nonexistent-scan-root"}
         a = self.run_clean(str(CFQ_BIN), "scan", env=scan_env)
-        b = self.run_clean("bash", str(SCRIPTS_DIR / "cfq-scan.sh"), env=scan_env)
+        b = self.run_clean("python3", str(SCRIPTS_DIR / "cfq_scan.py"), env=scan_env)
         self.assertEqual(a.stdout, b.stdout, msg="scan differs between dispatcher and direct call")
 
         home2 = self._repos_dir / "home2"
@@ -50,7 +50,7 @@ class DispatcherTest(CfqTestCase):
     def test_03_exit_codes_propagate(self):
         rc_dispatcher = self.run_cfq("batch", "allocate", "/no-such-repo-path").returncode
         rc_direct = subprocess.run(
-            ["bash", str(SCRIPTS_DIR / "cfq-batch-id.sh"), "allocate", "/no-such-repo-path"],
+            ["python3", str(SCRIPTS_DIR / "cfq_batch_id.py"), "allocate", "/no-such-repo-path"],
             capture_output=True, text=True,
         ).returncode
         self.assertNotEqual(rc_dispatcher, 0, msg="dispatcher exit 0 on a failing subcommand")
@@ -94,16 +94,15 @@ class DispatcherTest(CfqTestCase):
         # may be shell or Python (batch 014); scripts/cfq_lib/ is a package, not a command, and
         # a non-recursive glob already excludes it without needing to say so.
         text = CFQ_BIN.read_text()
-        pattern = re.compile(r"^\s*\[[a-z-]+\]=(cfq[a-z_-]+\.(?:sh|py)|ctx-usage\.sh)$", re.MULTILINE)
+        pattern = re.compile(r"^\s*\[[a-z-]+\]=(cfq[a-z_-]+\.(?:sh|py)|ctx_usage\.py)$", re.MULTILINE)
         mapped = sorted({m.group(1) for m in pattern.finditer(text)})
         on_disk = sorted(
             f.name
             for f in list(SCRIPTS_DIR.glob("*.sh")) + list(SCRIPTS_DIR.glob("*.py"))
-            if f.name != "cfq-paths.sh"
         )
         self.assertEqual(
             mapped, on_disk,
-            msg="dispatcher routing table and scripts/*.sh + scripts/*.py (minus cfq-paths.sh) disagree",
+            msg="dispatcher routing table and scripts/*.sh + scripts/*.py disagree",
         )
 
         # Exactly one noun per script (no script mapped twice).

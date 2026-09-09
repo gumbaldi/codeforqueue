@@ -45,33 +45,56 @@ branch string from a number/slug:
 
 `bin/cfq branch plan` is remote-aware: it fetches `origin` once (best-effort — no `origin`, or the
 fetch fails offline/sandboxed, and everything falls back to local-only behavior unchanged) before
-deciding, so a stale local `main`/branch never gets silently proposed as a base. Two additive
-fields ride along with every response: `remoteChecked` (bool) and `remoteWarning` (string or
-`null`, set only when local has commits `origin` doesn't and that gap can't be auto-resolved).
+deciding, so a stale local `main`/branch never gets silently proposed as a base. On the `new` path,
+`origin/*` is the source of truth for `candidates` — each is an object (`name`, `ref`,
+`aheadOfMain`, `behindRemote`, `aheadRemote`, `localOnly`, `highestBatch`, `mergedIntoOriginMain`,
+`lastCommit`), ranked by `lastCommit` descending, and `base`/`baseRef` already name the
+recommended one (`base: "main"` / `baseRef` pointing at `origin/main` when `candidates` is empty —
+never `null` waiting on a question). Every response additionally carries `remoteChecked` (bool),
+`remoteWarning` (string or `null`, set only when the chosen base — local `main` on `new`, the
+persisted branch on `continue` — has commits `origin` doesn't and the gap can't be auto-resolved),
+`remoteState` (`"synced"`/`"ahead"`/`"behind"`/`"diverged"`/`"unknown"` — the chosen base's own
+relationship to its `origin` counterpart, `"unknown"` whenever `remoteChecked` is `false` or no
+comparison was possible), `pushable` (bool, true only for `remoteState: "ahead"`), and `unpushed`
+(array of `"<hash> <subject>"` lines, empty unless `pushable`) — so the caller never has to branch
+on `mode` to read any of the three.
 
 - **`off`** (`branchPerBatch` is `false`) → `Branch: ➖ branchPerBatch off`, skip everything below.
-- **`continue`** (a branch for this batch already exists) → `git checkout "<branch>"`, don't write
-  a changelog entry (the batch is already recorded). Local purely behind its own
-  `origin/<branch>` is fast-forwarded automatically before checkout. `remoteWarning` non-null here
-  (local ahead of/diverged from `origin/<branch>`) doesn't block — `git checkout "<branch>"` still
-  runs, but the `Branch` status line surfaces the warning as a `⚠️` note.
-- **`new`** → `base` is already `main` when `candidates` is empty; local `main` purely behind
-  `origin/main` is fast-forwarded first, same as the `continue` case. Non-empty `candidates` → one
-  `AskUserQuestion` listing every entry in `candidates` plus `main`, deduplicated (`main` itself
-  ends up in `candidates` when it's the one that's ahead of `origin/main` — see below), asking
-  which one the new branch builds on. Recommended (first, labelled `(Recommended)`): the currently
-  checked-out branch if it's in the list, otherwise the first candidate. Each option's description
-  names how many commits it is ahead of `main` (`git rev-list --count main..<branch>`) — except the
-  branch `remoteWarning` is about: its option is phrased "use local `<branch>` anyway (ahead of
-  origin, deliberate)" and the question's context includes `remoteWarning` verbatim, so the choice
-  to override is explicit rather than an unremarked list entry. Then:
+- **`continue`** (a branch for this batch already exists) → resolve `remoteState` before touching
+  anything. **`behind`**: not checked out → `update-ref` fast-forwards the local ref as before,
+  then `git checkout "<branch>"`. Checked out with a clean tree → `git merge --ff-only
+  "refs/remotes/origin/<branch>"` instead (the ref of the currently-checked-out branch can't move
+  under `update-ref`). Checked out and dirty → nothing moves; `remoteWarning` names the dirty tree,
+  and the `Branch` status line surfaces it as a `⚠️` note — `git checkout "<branch>"` still runs,
+  a dirty tree here is otherwise the same error the **`new`** path already treats it as. **`ahead`**
+  (`pushable: true`) → one `AskUserQuestion` before the checkout: **Push and continue**
+  (recommended) runs `git push origin "<branch>"`, then proceeds; **Continue without pushing**
+  proceeds and names the commits from `unpushed` that won't be in this batch's base; **Cancel**
+  releases the lock and ends the session, nothing touched. **`diverged`** → the same three-option
+  question minus the push option — `remoteWarning` explains why a push would be rejected.
+  **`synced`**/**`unknown`** → plain `git checkout "<branch>"`, no question. Either way, don't write
+  a changelog entry — the batch is already recorded.
+- **`new`** → a genuinely empty `candidates` list resolves silently to `base`/`baseRef` (`main`/
+  `origin/main`), no question. Otherwise one `AskUserQuestion` listing every entry in `candidates`
+  (already ranked), asking which one the new branch builds on. Recommended (first, labelled
+  `(Recommended)`): `base` — the newest by `lastCommit`, never the checked-out branch. Each other
+  option's description names its `aheadOfMain`, plus `local only` / `already contained in
+  origin/main` / `behind origin by <behindRemote>` where applicable. The free-text answer
+  (`AskUserQuestion`'s built-in "Other") is resolved with `bin/cfq branch check "<repo-root>"
+  "<name>"`: `UNRESOLVED` → ask once more naming the unresolvable input; a second miss ends the
+  session without touching anything, exactly like the dirty-tree rule below. On `OK`, surface both
+  its warnings separately when they apply — "`<name>` is `<behind>` commit(s) behind
+  `origin/<name>`" and "`<newerCandidate.name>` has a newer commit (`<newerCandidate.lastCommit>`)"
+  — before the checkout runs, and use its `ref` as `<baseRef>` and `<name>` as `<base>` below. Then:
 
 ```bash
-git checkout "<base>"
-git checkout -b "<branch>"
+git checkout -b "<branch>" "<baseRef>"
 "<plugin-root>/bin/cfq" changelog init "<repo-root>" "<branch>" "<base>" "<batch>"
 "<plugin-root>/bin/cfq" branch plan "<repo-root>" "<batch>"
 ```
+
+`changelog init` keeps receiving `<base>` (the plain branch name), not `<baseRef>` — the changelog
+records which branch the work builds on, not which ref was used to cut it.
 
 The `new`-mode `bin/cfq branch plan` re-run above is the one and only place this batch's mutation
 step calls it directly — solely to reconfirm the branch now exists post-checkout; `continue`/`off`
@@ -95,10 +118,9 @@ hardcoded:
 `reconcile` never deletes anything and never touches a ledger entry with no directory — a reserved
 number whose batch never got parked is a legitimate abandoned reservation, not a gap to close.
 
-## Phase Announcement and Go Gate (Step 7)
+## Phase Announcement (Step 7)
 
-Runs after the size gate, before any code is written, every phase — the fine-grained counterpart
-to Step 4's one coarse per-batch go-ahead. The announcement is
+Runs after the size gate, before any code is written, every phase. The announcement is
 `bin/cfq brief "<batch-dir>" --phase <NN>`'s output, rendered as returned, no rewording —
 deterministic, extracted from the phase file, so it cannot drift in wording between phases:
 
@@ -109,10 +131,10 @@ PHASE 02 · ifq-per-phase-go-gate · Size L
   Check    <first command line from ## Verification>
 ```
 
-Then one `AskUserQuestion`, two options: **Go** — "proceed, implement this phase now" — and
-**Cancel** — "release the lock and end the session, nothing touched". `Cancel` runs
-`bin/cfq lock release "<repo-root>"`, reports "cancelled before implementation, nothing touched",
-and ends; it never leaves the lock held. `Go` proceeds straight to Step 8.
+Step 8 starts right after — there is no per-phase go-ahead beyond this announcement. What still
+stops a session: the size gate's `HANDOFF` verdict (Step 6, before this step runs), `stopUsed`
+after the phase (Step 10), and `onePhasePerSession` ending the session after exactly one phase
+regardless. The `WARN` variant below is the one case that still asks before proceeding.
 
 **`WARN` variant.** When `contextGate.verdict` is `WARN`, one warning line precedes the
 announcement, naming the reason and the concrete numbers from `contextGate.note` in the user's
@@ -128,12 +150,14 @@ PHASE 02 · ifq-per-phase-go-gate · Size L
   Check    <first command line from ## Verification>
 ```
 
-The `AskUserQuestion` then carries a third option: **Go** — "proceed, implement this phase now",
-its description naming the budget state so the user sees what they are accepting — and **must
-not** claim the attempt will fail. **Handoff** — "end the session cleanly instead of implementing",
+Then one `AskUserQuestion`, three options: **Go** — "proceed, implement this phase now", its
+description naming the budget state so the user sees what they are accepting — and **must not**
+claim the attempt will fail. **Handoff** — "end the session cleanly instead of implementing",
 reusing Step 10's `STOP` sequence (telemetry sync, lock release, the `HANDOFF ·
 implement-for-queue` short report) — this is the option that used to be forced on the user; it is
-now the one they choose. **Cancel** stays as above. No option may be phrased as futile — the
+now the one they choose. **Cancel** — "release the lock and end the session, nothing touched",
+runs `bin/cfq lock release "<repo-root>"`, reports "cancelled before implementation, nothing
+touched", and ends; it never leaves the lock held. No option may be phrased as futile — the
 observed bug produced a choice between "start anyway, but it will hand off immediately without
 implementing" and "cancel"; every option offered here must actually do what it says. This same
 warning line is reused verbatim at Step 4, above the batch briefing — one wording, two call

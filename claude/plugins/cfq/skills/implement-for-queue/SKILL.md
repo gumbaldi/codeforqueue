@@ -32,7 +32,7 @@ opening `POSTCHECKS`. `POSTCHECKS` opens only on a `STOP`, a red phase, or a fin
 
 ## Step 1 — Arguments
 
-Text passed with the invocation narrows batch selection in Step 3 — it never replaces the briefing, the go-ahead, or the per-phase Go question.
+Text passed with the invocation narrows batch selection in Step 3 — it never replaces the briefing or the go-ahead.
 
 ## Step 2 — Plan-Mode Gate
 
@@ -90,17 +90,17 @@ phase files in full here, that's Step 8's job. `contextGate.verdict` is `WARN` �
 line *above* the briefing, naming the reason in the user's language and the concrete numbers from
 `contextGate.note` (e.g. the five-hour budget is at 89% against a 70% threshold); state plainly
 that this is a budget warning, not a blocker, and that the phase runs normally if started — wording
-per `${CLAUDE_PLUGIN_ROOT}/references/queues.md`'s **Phase Announcement and Go Gate**. Present
+per `${CLAUDE_PLUGIN_ROOT}/references/queues.md`'s **Phase Announcement**. Present
 `batch.briefText` compactly (already the full per-phase listing — name/priority/phase
-count/`dependsOn`/one line per phase with size and context excerpt), then ask exactly one
+count/`dependsOn`/done phases ticked, open phases with size and context excerpt), then ask exactly one
 `AskUserQuestion`, "Start implementing this batch?" — no extra question for the warning, it only
 adds a line above the existing one:
 - **Start** → acquire the repo lock (`bin/cfq lock acquire "<repo-root>" "<batch>"`). Exit ≠ 0 (`LOCKED`) →
   **end immediately**, touch nothing, name holder/batch/time, note the 30-minute stale takeover;
   `TAKEOVER` → proceed, `Lock` carries that warning; else `Lock` is just acquired. `branch.mode`
   (from the preflight — already computed, no new call) decides the checkout — full behavior (`off`/`continue`/`new`,
-  base-branch question, checkout, changelog init, post-checkout reconfirm) — now fetch-checked against `origin`
-  first — in `${CLAUDE_PLUGIN_ROOT}/references/queues.md`'s **Branch and Changelog on Go-Ahead**. `Branch` renders whichever
+  base-branch question, checkout, changelog init, post-checkout reconfirm) — based on `origin`'s
+  current state — in `${CLAUDE_PLUGIN_ROOT}/references/queues.md`'s **Branch and Changelog on Go-Ahead**. `Branch` renders whichever
   happened. `resume` (same preflight
   result) already carries done/open phases, last commit, deviations, red-phase history,
   `.batch-context.md`'s path — no new `bin/cfq resume` call; if `resume.batchContext.exists`, `Read`
@@ -129,9 +129,9 @@ way.
 preflight from the phase's `## Size` heading, never prose arithmetic. `contextGate.verdict`, three
 branches:
 
-- `START` → Step 8, as normal.
-- `WARN` → **Step 7, same as `START`** — the phase is not blocked. The warning carries into Step 7's
-  Go question as a third option; nothing is skipped and nothing ends here.
+- `START` → Step 7, then Step 8.
+- `WARN` → **Step 7, same as `START`** — the phase is not blocked. Step 7's `AskUserQuestion` fires
+  only in this branch; nothing is skipped and nothing ends here.
 - `HANDOFF` → no phase ran, hand off cleanly (Step 10) instead.
 
 Print the `Size Gate` status line as `USED=<contextGate.used|?> SIZE=<contextGate.size>
@@ -140,19 +140,19 @@ LIMIT=<contextGate.limit> <contextGate.verdict> <contextGate.reason> (<contextGa
 fired structurally, the report repeats that token rather than a paraphrase of the note; this closes
 `PRECHECKS`.
 
-## Step 7 — Phase Announcement and Go Gate
+## Step 7 — Phase Announcement
 
 Print the phase announcement —
 `"${CLAUDE_PLUGIN_ROOT}/bin/cfq" brief "<batch-dir>" --phase <NN>`, rendered as returned, no
-rewording. `contextGate.verdict` was `WARN` → the announcement is followed by the same warning line
-as Step 4, and the `AskUserQuestion` gains a third option: **Go** (proceed to Step 8, description names
-the budget state, never claims the attempt will fail) / **Handoff** (end the session cleanly
-instead of implementing — Step 10's `STOP` sequence: telemetry sync, lock release, short handoff
-report) / **Cancel** (release the lock, end the session, nothing touched). Otherwise just **Go** /
-**Cancel** as before. The warning re-appears at every phase because Step 7 runs per phase — intended,
-not a repetition bug: nothing advances automatically while the budget is over threshold. Rendering
-example and option copy in `${CLAUDE_PLUGIN_ROOT}/references/queues.md`'s **Phase Announcement
-and Go Gate**.
+rewording — then go straight to Step 8. `contextGate.verdict` was `WARN` is the one exception: the
+announcement is followed by the same warning line as Step 4, and one `AskUserQuestion` with three
+options: **Go** (proceed to Step 8, description names the budget state, never claims the attempt
+will fail) / **Handoff** (end the session cleanly instead of implementing — Step 10's `STOP`
+sequence: telemetry sync, lock release, short handoff report) / **Cancel** (release the lock, end
+the session, nothing touched). The warning re-appears at every phase because Step 7 runs per phase
+— intended, not a repetition bug: nothing advances automatically while the budget is over
+threshold. Rendering example and option copy in `${CLAUDE_PLUGIN_ROOT}/references/queues.md`'s
+**Phase Announcement**.
 
 ## Step 8 — Implementation
 
@@ -209,8 +209,8 @@ below, regardless of the context gate's own verdict; `false` → the context gat
 - `OK` → next phase, same batch.
 - `WARN` → **do not end, do not advance silently.** Go to Step 5 for the next phase (re-running the
   preflight with `--select <batch>` as Step 5 already requires for any phase past the first), so
-  the announcement and the Go gate run. The gate there resolves `WARN` again and Step 7 carries the
-  warning and its three options. If there is no next open phase, Step 11 (Batch Done) runs
+  the size gate resolves `WARN` again and Step 7 carries the warning and its three options. If
+  there is no next open phase, Step 11 (Batch Done) runs
   normally — a finished batch is not held back by a budget warning. An unresolvable context reading
   arrives as `WARN REASON=unknown` and follows this same path — the user decides, rather than the
   session ending on a missing measurement.
@@ -222,11 +222,10 @@ wins over the `stopUsed: 0` bypass no longer holds. `stopUsed: -1` is equally de
 never fires **for the capacity reason**; the rate-limit reason has its own switches.
 `stopFiveHourPct: -1` and `stopSevenDayPct: -1` are each just as deliberate — warns for nothing for
 that reason either; a payload without `rate_limits` (API-level billing) means the check simply
-doesn't apply, which isn't worth a comment. `onePhasePerSession: true` (the default) is the finer
-of two gates: the batch-level Step 4 go-ahead is coarse, this and Step 7's per-phase Go question
-are fine — together nothing is ever implemented without an explicit confirmation naming what's
-about to change; it outranks `WARN` — with one-phase-per-session on, the session ends after a phase
-either way, and the budget warning changes nothing.
+doesn't apply, which isn't worth a comment. `onePhasePerSession: true` (the default) means every
+session implements exactly one phase after the single per-batch confirmation from Step 4 — it
+outranks `WARN`: with one-phase-per-session on, the session ends after a phase either way, and the
+budget warning changes nothing.
 
 ## Step 11 — Batch Done
 

@@ -1,7 +1,7 @@
 """Migrated from test-brief-park.sh.
 
-Self-test for scripts/cfq-brief.sh (batch listing plus --phase announcement mode) and
-scripts/cfq-park.sh (batch directory creation, .priority/.dependsOn, Git exclude registration).
+Self-test for scripts/cfq_brief.py (batch listing plus --phase announcement mode) and
+scripts/cfq_park.py (batch directory creation, .priority/.dependsOn, Git exclude registration).
 """
 
 import subprocess
@@ -108,6 +108,56 @@ class BriefTest(CfqTestCase):
             "PHASE 01 · Complete phase · Size S", out.splitlines(),
             f"--phase should find a phase already moved to done/: {out}",
         )
+
+    def test_with_done_flag_lists_done_then_open(self):
+        batch = self._repos_dir / "2026-01-04-withdone"
+        done_dir = batch / "done"
+        done_dir.mkdir(parents=True)
+        (done_dir / "01-first.md").write_text("# First phase\n\n## Affected Files\n")
+        (batch / "02-second.md").write_text("# Second phase\n\n## Affected Files\n")
+        (batch / "03-third.md").write_text("# Third phase\n\n## Affected Files\n")
+
+        default_out = self.run_cfq("brief", str(batch), check=True).stdout
+        self.assertIn(
+            "2026-01-04-withdone  phases=2", default_out.splitlines(), f"header wrong: {default_out}",
+        )
+        self.assertFalse(
+            any(l.startswith("✔") for l in default_out.splitlines()),
+            f"default output must not list done phases: {default_out}",
+        )
+
+        out = self.run_cfq("brief", str(batch), "--with-done", check=True).stdout
+        lines = out.splitlines()
+        self.assertIn(
+            "2026-01-04-withdone  phases=2", lines, f"--with-done must still count open only: {out}",
+        )
+        self.assertTrue(
+            any(l.startswith("✔ 01") for l in lines), f"done phase 01 missing: {out}",
+        )
+        done_idx = next(i for i, l in enumerate(lines) if l.startswith("✔ 01"))
+        second_idx = next(i for i, l in enumerate(lines) if l.startswith("02"))
+        third_idx = next(i for i, l in enumerate(lines) if l.startswith("03"))
+        self.assertLess(done_idx, second_idx, "done phases must print before open phases")
+        self.assertLess(second_idx, third_idx, "open phases must stay in number order")
+
+    def test_with_done_all_done_keeps_phases_zero(self):
+        batch = self._repos_dir / "2026-01-05-alldone"
+        done_dir = batch / "done"
+        done_dir.mkdir(parents=True)
+        (done_dir / "01-first.md").write_text("# First phase\n\n## Affected Files\n")
+        (done_dir / "02-second.md").write_text("# Second phase\n\n## Affected Files\n")
+
+        out = self.run_cfq("brief", str(batch), "--with-done", check=True).stdout
+        lines = out.splitlines()
+        self.assertIn("2026-01-05-alldone  phases=0", lines, f"phases=0 line wrong: {out}")
+        self.assertTrue(any(l.startswith("✔ 01") for l in lines), f"done phase 01 missing: {out}")
+        self.assertTrue(any(l.startswith("✔ 02") for l in lines), f"done phase 02 missing: {out}")
+
+    def test_with_done_unknown_flag_rejected(self):
+        proc = self.run_cfq("brief", str(self.batch), "--nonsense")
+        self.assertNotEqual(proc.returncode, 0, "--nonsense should exit non-zero")
+        self.assertEqual(proc.stdout, "", f"--nonsense should print no partial output: {proc.stdout}")
+        self.assertTrue(proc.stderr, "--nonsense should print a message on stderr")
 
     def test_unflagged_batch_omits_priority_clause(self):
         unflagged = self._repos_dir / "2026-01-03-unflagged"

@@ -1,7 +1,7 @@
 """Migrated from test-checks.sh.
 
-Self-test for scripts/cfq-lint.sh, scripts/cfq-security.sh, scripts/cfq-lang.sh and
-scripts/cfq-maintenance.sh, plus the commands/* short/long-form pairs.
+Self-test for scripts/cfq_lint.py, scripts/cfq_security.py, scripts/cfq_lang.py and
+scripts/cfq_maintenance.py, plus the commands/* short/long-form pairs.
 """
 
 import os
@@ -382,7 +382,7 @@ class TestSecurity(CfqTestCase):
         self.assertIsInstance(out, dict, f"manifest-only security output is not valid JSON: {proc.stdout}")
 
     def test_security_findings_cap(self):
-        # securityFindingsCap actually reaches cfq-security.sh's behavior: a synthetic npm-audit
+        # securityFindingsCap actually reaches cfq_security.py's behavior: a synthetic npm-audit
         # fixture producing more findings than a lowered cap gets truncated to it.
         capfixture = self._repos_dir / "capfixture"
         (capfixture / "bin").mkdir(parents=True)

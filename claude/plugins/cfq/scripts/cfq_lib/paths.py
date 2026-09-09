@@ -1,9 +1,6 @@
-"""Canonical repo-local CFQ path helpers — Python mirror of scripts/cfq-paths.sh.
+"""Canonical repo-local CFQ path helpers.
 
-Pure string work only, no mutation, no I/O. This is a deliberate, tested duplication of the
-shell file (tests/test_layout.py's consistency test runs both against the same cases and asserts
-byte-identical output): the shell file stays in place for the 22 scripts that still source it,
-and the duplication disappears when the last of them is ported.
+Pure string work only, no mutation, no I/O.
 """
 
 

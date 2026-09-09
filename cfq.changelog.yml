@@ -545,3 +545,93 @@
   started: 2026-09-05
   status: in-progress
   legacy: false
+- batchNumber: 15
+  batch: 015-2026-09-06-ifq-remote-base-and-go-gate
+  branch: cfq/015-2026-09-06-ifq-remote-base-and-go-gate
+  base: cfq/014-2026-09-03-port-core-scripts-to-python
+  started: 2026-09-06
+  status: done
+  legacy: false
+  finished: 2026-09-07
+  phases:
+    - phase: "01-branch-check-subcommand"
+      status: "green"
+      summary: ""
+    - phase: "02-remote-candidates-and-base-ranking"
+      status: "green"
+      summary: ""
+    - phase: "03-local-commits-not-on-origin"
+      status: ""
+      summary: ""
+    - phase: "04-drop-phase-go-gate-and-full-briefing"
+      status: "green"
+      summary: ""
+- batchNumber: 16
+  batch: 016-2026-09-06-cfq-dashboard-focus-and-affordances
+  branch: cfq/016-2026-09-06-cfq-dashboard-focus-and-affordances
+  base: cfq/015-2026-09-06-ifq-remote-base-and-go-gate
+  started: 2026-09-07
+  status: done
+  legacy: false
+  finished: 2026-09-07
+  phases:
+    - phase: "01-scan-next-batch-resolver"
+      status: "green"
+      summary: "Moved the /ifq selection ranking into bin/cfq scan --format=next; cfq-ifq-preflight.sh now consumes it instead of re-deriving the decision."
+    - phase: "02-dash-open-batches-and-expanded-phases"
+      status: "green"
+      summary: ""
+    - phase: "03-dash-next-and-actions-sections"
+      status: "green"
+      summary: "Moved the cd/model/ifq handoff into its own NEXT section (current repo first, always last), added an ACTIONS section listing every Step C/D capability with a drift guard against dashboard.md, and made the plugins line unambiguous: mode: off vanishes instead of printing a false-alarm-looking clause, and the ponytail audit switch now reads maintenance audit: on/off instead of the ambiguous audit on/off."
+- batchNumber: 17
+  batch: 017-2026-09-07-port-remaining-scripts-to-python
+  branch: cfq/017-2026-09-07-port-remaining-scripts-to-python
+  base: cfq/016-2026-09-06-cfq-dashboard-focus-and-affordances
+  started: 2026-09-07
+  status: done
+  legacy: false
+  finished: 2026-09-09
+  phases:
+    - phase: "01-port-layout-registry-park"
+      status: "green"
+      summary: "Ported cfq-layout.sh, cfq-registry.sh and cfq-park.sh to cfq_layout.py/cfq_registry.py/cfq_park.py behind the frozen bin/cfq CLI contract; characterization tests written first against the shell versions."
+    - phase: "02-port-lock-and-maintenance"
+      status: "green"
+      summary: ""
+    - phase: "03-port-runtime"
+      status: "green"
+      summary: ""
+    - phase: "04-port-ctx-usage-and-telemetry"
+      status: "green"
+      summary: "Ported ctx-usage.sh -> scripts/ctx_usage.py and cfq-telemetry.sh -> scripts/cfq_telemetry.py (stdlib Python, no jq/bash dependency), rewired bin/cfq's routing table (ctx, telemetry nouns), updated tests/test_dispatcher.py's completeness regex, renamed both filenames across CLAUDE.md, and deleted both shell scripts. Full suite green (301 tests); verified `cfq ctx` / `cfq ctx gate L` / `cfq ctx --help` and a real `cfq telemetry record` call end-to-end (no prompt text leaked into telemetry.jsonl, field whitelist unchanged)."
+    - phase: "05-port-scan-and-queue-overlap"
+      status: "green"
+      summary: "Ported cfq-scan.sh and cfq-queue-overlap.sh to cfq_scan.py/cfq_queue_overlap.py, adding cfq_lib/queue.py as the second-caller batch-directory-traversal module; all five scan formats verified byte-identical to the shell version via before/after diff."
+    - phase: "06-port-batch-id"
+      status: "green"
+      summary: "Ported cfq-batch-id.sh (501 lines, batch-identity allocation/width-migration/reconcile) to cfq_batch_id.py; routed [batch] in bin/cfq; deleted the shell file."
+    - phase: "07-port-brief-and-lint"
+      status: "green"
+      summary: ""
+    - phase: "08-port-lang-and-security"
+      status: "green"
+      summary: ""
+    - phase: "09-port-branch"
+      status: "green"
+      summary: ""
+    - phase: "10-port-resume-and-finish"
+      status: "green"
+      summary: "Ported cfq-resume.sh and cfq-finish.sh to cfq_resume.py/cfq_finish.py behind the bin/cfq dispatcher; the finish trap became a try/finally guaranteeing lock release."
+    - phase: "11-port-preflights"
+      status: "green"
+      summary: "Ported cfq-pfq-preflight.sh and cfq-ifq-preflight.sh to cfq_pfq_preflight.py/cfq_ifq_preflight.py behind the bin/cfq dispatcher; the ifq gate-line parsing regex and the shell-order selection logic (multipleInProgress / single inProgress / sorted-by-priority) carried over verbatim."
+    - phase: "12-port-dash"
+      status: "green"
+      summary: "Ported cfq-dash.sh to cfq_dash.py (JSON + render modes), routed bin/cfq at the [dash] entry, deleted the shell script."
+    - phase: "13-retire-paths-jq-and-timeout"
+      status: "green"
+      summary: ""
+- batchNumber: 18
+  batch: 018-2026-09-07-plan-critique-and-scope-guard
+  status: parked

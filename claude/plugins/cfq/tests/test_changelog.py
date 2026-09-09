@@ -214,10 +214,10 @@ class ChangelogTest(CfqTestCase):
         self.assertNotEqual(proc.returncode, 0, "reserve accepted a duplicate batch")
 
         # ledger/queue invariant, changelog half: reserve only ever writes the ledger side, never a
-        # queue directory -- pairing the two is cfq-batch-id.sh allocate's job, not this script's.
+        # queue directory -- pairing the two is cfq_batch_id.py allocate's job, not this script's.
         self.assertFalse(
             (dup_repo / ".claude/cfq/impl/002-2026-02-02-dup").exists(),
-            "reserve created a queue directory; that pairing must stay cfq-batch-id.sh's job",
+            "reserve created a queue directory; that pairing must stay cfq_batch_id.py's job",
         )
 
     def test_max_batch_number_ignores_legacy_and_null(self):

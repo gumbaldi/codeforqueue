@@ -332,7 +332,7 @@ def cmd_rename_batch(args):
 
 def cmd_branch_for(args):
     """Read-only: the branch persisted for <batch> in the ledger (any status), no output on no
-    match, missing file or disabled changelog. Authoritative source for cfq-branch.sh's
+    match, missing file or disabled changelog. Authoritative source for cfq_branch.py's
     continue-mode check -- more precise than re-deriving a branch from a slug suffix match."""
     repo, batch = args.repo, args.batch
     target = changelog_file(repo)

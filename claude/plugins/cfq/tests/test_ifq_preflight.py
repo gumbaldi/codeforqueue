@@ -1,7 +1,8 @@
-"""Migrated from test-ifq-preflight.sh (scripts/cfq-ifq-preflight.sh).
+"""Migrated from test-ifq-preflight.sh (scripts/cfq_ifq_preflight.py, ported from
+cfq-ifq-preflight.sh in batch `017` phase 11).
 
-The stub renames `cfq-branch.sh` and shadows it by filename. When that script is ported to
-Python, this stub has to shadow `cfq_branch.py` instead — see batch `014` phase 02.
+The stub renames `cfq_branch.py` and shadows it by filename -- `cfq-branch.sh` was ported to
+Python in batch `017` phase 09 (see batch `014` phase 02 for the shadowing pattern itself).
 """
 
 import json
@@ -15,32 +16,34 @@ from cfq_testlib import CfqTestCase, PLUGIN_ROOT
 class IfqPreflightTest(CfqTestCase):
     def setUp(self):
         super().setUp()
-        # Copies the whole scripts/ dir so cfq-ifq-preflight.sh's own script_dir resolution
-        # (and every sibling script it shells out to, e.g. cfq-resume.sh -> cfq-branch.sh)
-        # resolves inside the copy, then swaps cfq-branch.sh for a wrapper that logs every
+        # Copies the whole scripts/ dir so cfq_ifq_preflight.py's own script_dir resolution
+        # (and every sibling script it shells out to, e.g. cfq_resume.py -> cfq_branch.py)
+        # resolves inside the copy, then swaps cfq_branch.py for a wrapper that logs every
         # invocation before delegating to the real binary. bin/ is copied alongside scripts/
         # (same relative layout as the real plugin) because internal sibling calls now route
         # through bin/cfq, which resolves its own NOUN_SCRIPT table relative to itself.
         self.scripts_copy = self._repos_dir / "scripts"
         shutil.copytree(PLUGIN_ROOT / "scripts", self.scripts_copy)
         shutil.copytree(PLUGIN_ROOT / "bin", self._repos_dir / "bin")
-        real = self.scripts_copy / "cfq-branch-real.sh"
-        (self.scripts_copy / "cfq-branch.sh").rename(real)
+        real = self.scripts_copy / "cfq_branch_real.py"
+        (self.scripts_copy / "cfq_branch.py").rename(real)
         self.count_log = self._repos_dir / "branch-calls.log"
         self.count_log.write_text("")
-        stub = self.scripts_copy / "cfq-branch.sh"
-        stub.write_text(f"""#!/usr/bin/env bash
-set -eu
-d="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
-echo call >> "{self.count_log}"
-exec "$d/cfq-branch-real.sh" "$@"
+        stub = self.scripts_copy / "cfq_branch.py"
+        stub.write_text(f"""#!/usr/bin/env python3
+import subprocess
+import sys
+
+with open({str(self.count_log)!r}, "a") as f:
+    f.write("call\\n")
+sys.exit(subprocess.run([sys.executable, {str(real)!r}] + sys.argv[1:]).returncode)
 """)
         stub.chmod(0o755)
-        self.pf = self.scripts_copy / "cfq-ifq-preflight.sh"
+        self.pf = self.scripts_copy / "cfq_ifq_preflight.py"
 
     def _run_pf(self, *args, home=None):
         return self.run_clean(
-            "bash", str(self.pf), *args,
+            "python3", str(self.pf), *args,
             env={"HOME": str(home if home is not None else self.home)},
         )
 
@@ -55,7 +58,7 @@ exec "$d/cfq-branch-real.sh" "$@"
             "commit", "-q", "--allow-empty", "-m", "init",
         )
         self.run_clean(
-            "bash", str(self.scripts_copy / "cfq-registry.sh"), "add", str(repo),
+            "python3", str(self.scripts_copy / "cfq_registry.py"), "add", str(repo),
         )
         return repo
 
@@ -74,7 +77,7 @@ exec "$d/cfq-branch-real.sh" "$@"
         out = self.json_out(self._run_pf(str(repo1)))
         self.assertEqual(out["status"], "OK", msg=f"continue-mode status = {out}")
         self.assertEqual(out["branch"]["mode"], "continue", msg=f"expected continue mode = {out}")
-        self.assertEqual(self._calls(), 1, msg=f"continue-mode cfq-branch.sh calls = {self._calls()}, want 1")
+        self.assertEqual(self._calls(), 1, msg=f"continue-mode cfq_branch.py calls = {self._calls()}, want 1")
         self.assertTrue(
             "implExploreModel" in out["policy"] and "implExploreModelComplex" in out["policy"],
             msg=f"policy missing implExploreModel/implExploreModelComplex: {out}",
@@ -98,10 +101,10 @@ exec "$d/cfq-branch-real.sh" "$@"
         branch = out["branch"]["branch"]
         self.run_clean("git", "-C", str(repo2), "checkout", "-q", "-b", branch)
         self.run_clean(
-            "bash", str(self.scripts_copy / "cfq-branch.sh"), "plan", str(repo2), "2026-01-01-fresh",
+            "python3", str(self.scripts_copy / "cfq_branch.py"), "plan", str(repo2), "2026-01-01-fresh",
             env={"HOME": str(self.home)},
         )
-        self.assertEqual(self._calls(), 2, msg=f"new-mode cfq-branch.sh calls = {self._calls()}, want 2")
+        self.assertEqual(self._calls(), 2, msg=f"new-mode cfq_branch.py calls = {self._calls()}, want 2")
 
     def test_selection_filters(self):
         repo3 = self._setup_repo("multi-repo")
@@ -242,11 +245,11 @@ exec "$d/cfq-branch-real.sh" "$@"
         out = self.json_out(self._run_pf(str(repo9)))
         self.assertEqual(out["contextGate"]["size"], "M", msg=f"missing ## Size should default to M: {out}")
         direct_gate = self.run_clean(
-            "bash", str(self.scripts_copy / "ctx-usage.sh"), "gate", "M",
+            "python3", str(self.scripts_copy / "ctx_usage.py"), "gate", "M",
             env={"HOME": str(self.home)},
         ).stdout
         # The original Bash test only ever looked for START/HANDOFF here, silently missing WARN
-        # (the verdict ctx-usage.sh returns when no statusline payload/transcript is reachable
+        # (the verdict ctx_usage.py returns when no statusline payload/transcript is reachable
         # under an isolated $HOME, as in this sandbox) -- broadened to all three verdicts so the
         # comparison is meaningful regardless of whether a live payload is resolvable.
         direct_verdict = next(
@@ -254,7 +257,7 @@ exec "$d/cfq-branch-real.sh" "$@"
         )
         self.assertEqual(
             out["contextGate"]["verdict"], direct_verdict,
-            msg="contextGate.verdict != ctx-usage.sh gate's own verdict",
+            msg="contextGate.verdict != ctx_usage.py gate's own verdict",
         )
 
     def test_deterministic_and_read_only(self):
